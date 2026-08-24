@@ -50,6 +50,7 @@ public class SecurityConfig {
             "/reports/**",
             "/ppc/**",
             "/history",
+            "/completed",
             "/settings/**",
             "/admin",
             "/admin/**",
