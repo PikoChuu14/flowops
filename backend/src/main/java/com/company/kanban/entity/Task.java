@@ -59,6 +59,9 @@ public class Task {
 
     private LocalDateTime submittedForReviewAt;
 
+    /** Reliable completion event timestamp; null for legacy tasks completed before this field existed. */
+    private LocalDateTime completedAt;
+
     public Task() {
     }
 
@@ -156,6 +159,8 @@ public class Task {
 
     public LocalDateTime getSubmittedForReviewAt() { return submittedForReviewAt; }
     public void setSubmittedForReviewAt(LocalDateTime value) { this.submittedForReviewAt = value; }
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime value) { this.completedAt = value; }
 
     public void setTitle(String title) {
         this.title = title;
@@ -200,4 +205,6 @@ public class Task {
     public void setCreatedBy(User createdBy) {
         this.createdBy = createdBy;
     }
+
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

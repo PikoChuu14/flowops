@@ -22,7 +22,7 @@ public class User {
     private String password;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "varchar(32) default 'ACTIVE'")
+    @Column(nullable = false)
     private AccountStatus status = AccountStatus.ACTIVE;
 
     @Enumerated(EnumType.STRING)

@@ -1,0 +1,29 @@
+package com.company.kanban.config;
+
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+/** Keeps the legacy PostgreSQL enum check in sync when new notification types are added. */
+@Component
+@Profile({"dev", "prod"})
+public class NotificationSchemaMigration implements ApplicationRunner {
+    private final JdbcTemplate jdbcTemplate;
+
+    public NotificationSchemaMigration(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        jdbcTemplate.execute("ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check");
+        jdbcTemplate.execute("ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN (" +
+                "'TASK_CREATED','TASK_ASSIGNED','TASK_UPDATED','TASK_REASSIGNED'," +
+                "'TASK_REVIEW_SUBMITTED','TASK_REVIEW_RETURNED','TASK_APPROVED'," +
+                "'PROJECT_CREATED','DAILY_REPORT_SUBMITTED'," +
+                "'RAW_MATERIAL_ARRIVING_TOMORROW','RAW_MATERIAL_DUE_TODAY'," +
+                "'RAW_MATERIAL_DELAYED','RAW_MATERIAL_FOLLOW_UP_DUE'))");
+    }
+}

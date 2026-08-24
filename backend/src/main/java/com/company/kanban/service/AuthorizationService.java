@@ -28,6 +28,15 @@ public class AuthorizationService {
         }
     }
 
+    public void requirePpcRawMaterialArrivalAccess(User user) {
+        if (isAdmin(user)) return;
+        if (user == null || user.getDepartment() == null
+                || !"PPC".equalsIgnoreCase(user.getDepartment().getName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Raw material arrivals are available only to PPC users and administrators");
+        }
+    }
+
     public boolean canAccessDepartment(User user, Long departmentId) {
         return isAdmin(user)
                 || user != null

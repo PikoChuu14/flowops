@@ -138,6 +138,6 @@ public class NotificationService {
 
     private NotificationResponse toResponse(Notification n) {
         return new NotificationResponse(n.getId(), n.getType(), n.getTitle(), n.getMessage(), n.isRead(),
-                n.getCreatedAt(), n.getTaskId(), n.getBoardId(), n.getDailyReportId());
+                n.getCreatedAt(), n.getTaskId(), n.getBoardId(), n.getDailyReportId(), n.getRawMaterialArrivalId());
     }
 }

@@ -19,6 +19,19 @@ public interface TaskRepository
 
     List<Task> findByAssigneeIdOrderByStatusAscPositionAsc(Long assigneeId);
 
+    @org.springframework.data.jpa.repository.Query("""
+            select distinct t from Task t
+            left join fetch t.column c
+            left join fetch c.board b
+            left join fetch b.department bd
+            left join fetch t.department td
+            left join fetch t.assignee a
+            left join fetch t.createdBy cb
+            where a.id = :assigneeId
+            order by t.id
+            """)
+    List<Task> findDetailedByAssigneeId(Long assigneeId);
+
     List<Task> findByStatusOrderBySubmittedForReviewAtAsc(com.company.kanban.entity.TaskStatus status);
 
     int countByColumnId(Long columnId);

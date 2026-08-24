@@ -18,11 +18,13 @@ import HistoryPage from "./pages/HistoryPage";
 import ReassignTaskModal from "./components/ReassignTaskModal";
 import DailyReportPage from "./pages/DailyReportPage";
 import TeamDailyReportsPage from "./pages/TeamDailyReportsPage";
+import MonthlyReportsPage from "./pages/MonthlyReportsPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import ClientAccessPage from "./pages/ClientAccessPage";
 import ActivationPage from "./pages/ActivationPage";
 import PpcPlanningPage from "./pages/PpcPlanningPage";
+import RawMaterialArrivalsPage from "./pages/RawMaterialArrivalsPage";
 import { apiFetch } from "./api/apiFetch";
 import { useAuth } from "./context/AuthContext";
 
@@ -57,7 +59,7 @@ function App() {
   const isManager = user?.role === "MANAGER";
   const canManageBoards = isAdmin || isManager;
   const canDeleteTask = isAdmin || isManager;
-  const initialView = window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard";
+  const initialView = window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/ppc/raw-material-arrivals" ? "ppc-arrivals" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : window.location.pathname.startsWith("/reports/monthly") ? "report" : "dashboard";
   const [activeView, setActiveView] = useState(initialView);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [staffRefreshKey, setStaffRefreshKey] = useState(0);
@@ -158,7 +160,7 @@ function App() {
     // Permission errors are handled silently in the workspace. Clear any
     // stale message when switching accounts or roles.
     setPermissionMessage("");
-    setActiveView(window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard");
+    setActiveView(window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/ppc/raw-material-arrivals" ? "ppc-arrivals" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard");
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -671,11 +673,14 @@ function App() {
         if (view === "dashboard") setStaffRefreshKey((currentKey) => currentKey + 1);
         if (view === "report") { setSelectedReportUserId(null); setSelectedReportDate(null); }
         setActiveView(view);
-        const path=view==='ppc-planning'?'/ppc/planning':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':'/';
+        const path=view==='ppc-planning'?'/ppc/planning':view==='ppc-arrivals'?'/ppc/raw-material-arrivals':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':view==='report'?'/reports/monthly':'/';
         window.history.pushState({},'',path);
       }}
       onNotificationNavigate={(notification) => {
-        if (isAdmin) {
+        if (notification.rawMaterialArrivalId) {
+          setActiveView("ppc-arrivals");
+          window.history.pushState({}, "", `/ppc/raw-material-arrivals?arrivalId=${notification.rawMaterialArrivalId}`);
+        } else if (isAdmin) {
           if (notification.boardId) {
             setSelectedBoardId(notification.boardId);
             setActiveView("project");
@@ -708,11 +713,15 @@ function App() {
         <ClientAccessPage />
       ) : activeView === "ppc-planning" && (isAdmin || user?.departmentName?.toUpperCase() === "PPC") ? (
         <PpcPlanningPage />
+      ) : activeView === "ppc-arrivals" && (isAdmin || user?.departmentName?.toUpperCase() === "PPC") ? (
+        <RawMaterialArrivalsPage />
       ) : activeView === "reviews" ? (
         <ReviewQueuePage onRefresh={() => setStaffRefreshKey((currentKey) => currentKey + 1)} />
       ) : activeView === "history" ? (
         <HistoryPage key={`${user?.userId}-${user?.role}`} user={user} users={users} departments={departments} />
       ) : activeView === "report" ? (
+        <MonthlyReportsPage user={user} departments={departments} />
+      ) : activeView === "legacy-report" ? (
         user?.role === "STAFF" || selectedReportUserId ? (
           <DailyReportPage user={user} selectedUserId={selectedReportUserId || user.userId} selectedDate={selectedReportDate} onBack={() => { setSelectedReportUserId(null); setSelectedReportDate(null); setActiveView(user.role === "STAFF" ? "dashboard" : "report"); }} onViewSnapshot={(id, date) => { setSelectedReportUserId(id); setSelectedReportDate(date); setActiveView("history"); }} />
         ) : (

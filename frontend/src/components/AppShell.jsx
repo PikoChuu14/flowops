@@ -38,8 +38,8 @@ function AppShell({ user, activeView, onNavigate, onNotificationNavigate, onLogo
     ...(canSeeProjects ? [{ id: "project", label: "Projects", icon: "projects" }] : []),
     ...(canSeeTeam ? [{ id: "staff", label: "Team", icon: "team" }] : []),
     ...(user?.role === "MANAGER" ? [{ id: "reviews", label: "Reviews", icon: "reviews" }] : []),
-    ...(!isAdmin ? [{ id: "report", label: user?.role === "STAFF" ? "Daily Report" : "Daily Reports", icon: "report" }] : []),
-    ...(canSeePpc ? [{ id: "ppc-planning", label: "Planning", icon: "calendar" }] : []),
+    ...[{ id: "report", label: "Monthly Reports", icon: "report" }],
+    ...(canSeePpc ? [{ id: "ppc-planning", label: "Planning", icon: "calendar" }, { id: "ppc-arrivals", label: "Raw Material Arrival", icon: "calendar" }] : []),
     ...(isAdmin ? [{ id: "users-admin", label: "Users", icon: "users" }, { id: "data-management", label: "Data Management", icon: "settings" }, { id: "client-access", label: "Client Access", icon: "network" }] : []),
   ];
 

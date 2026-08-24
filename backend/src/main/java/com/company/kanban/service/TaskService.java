@@ -292,6 +292,7 @@ public class TaskService {
         TaskStatus previousStatus = task.getStatus();
         task.setColumn(targetColumn);
         task.setStatus(statusFromColumn(targetColumn));
+        updateCompletionTimestamp(task);
         if (task.getStatus() == TaskStatus.REVIEW) task.setSubmittedForReviewAt(java.time.LocalDateTime.now());
         else task.setSubmittedForReviewAt(null);
 
@@ -370,6 +371,7 @@ public class TaskService {
         TaskStatus previousStatus = task.getStatus();
         task.setColumn(targetColumn);
         task.setStatus(request.status());
+        updateCompletionTimestamp(task);
         if (request.status() == TaskStatus.REVIEW) task.setSubmittedForReviewAt(java.time.LocalDateTime.now());
         if (request.status() != TaskStatus.REVIEW) task.setSubmittedForReviewAt(null);
         targetTasks.add(targetPosition - 1, task);
@@ -418,6 +420,7 @@ public class TaskService {
             List<Task> sourceTasks = new ArrayList<>(
                     taskRepository.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(TaskStatus.REVIEW, task.getId()));
             task.setStatus(targetStatus);
+            updateCompletionTimestamp(task);
             task.setSubmittedForReviewAt(null);
             task.setPosition(targetTasks.size() + 1);
             targetTasks.add(task);
@@ -443,6 +446,7 @@ public class TaskService {
                         targetColumn.getId(), taskId);
         task.setColumn(targetColumn);
         task.setStatus(targetStatus);
+        updateCompletionTimestamp(task);
         if (request.action() == ReviewAction.RETURN) task.setSubmittedForReviewAt(null);
         targetTasks.add(task);
         normalizePositions(targetTasks);
@@ -566,6 +570,7 @@ public class TaskService {
                         previousStatus, task.getId()));
         int targetPosition = Math.max(1, Math.min(request.targetPosition(), targetTasks.size() + 1));
         task.setStatus(request.status());
+        updateCompletionTimestamp(task);
         task.setSubmittedForReviewAt(request.status() == TaskStatus.REVIEW
                 ? java.time.LocalDateTime.now() : null);
         targetTasks.add(targetPosition - 1, task);
@@ -601,6 +606,14 @@ public class TaskService {
             case REVIEW -> "Review";
             case DONE -> "Done";
         };
+    }
+
+    private void updateCompletionTimestamp(Task task) {
+        if (task.getStatus() == TaskStatus.DONE && task.getCompletedAt() == null) {
+            task.setCompletedAt(java.time.LocalDateTime.now());
+        } else if (task.getStatus() != TaskStatus.DONE) {
+            task.setCompletedAt(null);
+        }
     }
 
     private void normalizePositions(List<Task> tasks) {
