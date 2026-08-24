@@ -31,6 +31,7 @@ public record TaskResponse(
 
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
+        LocalDateTime completedAt,
 
         Long departmentId,
         String departmentName,

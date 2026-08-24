@@ -1,6 +1,7 @@
 package com.company.kanban.config;
 
 import com.company.kanban.security.JwtAuthenticationFilter;
+import com.company.kanban.security.DeviceAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,8 +45,12 @@ public class SecurityConfig {
             "/activate",
             "/dashboard",
             "/projects",
+            "/reviews",
             "/reports",
+            "/reports/**",
+            "/ppc/**",
             "/history",
+            "/settings/**",
             "/admin",
             "/admin/**",
             "/manager",
@@ -53,12 +58,15 @@ public class SecurityConfig {
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final DeviceAuthenticationFilter deviceAuthenticationFilter;
 
     public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            DeviceAuthenticationFilter deviceAuthenticationFilter
     ) {
         this.jwtAuthenticationFilter =
                 jwtAuthenticationFilter;
+        this.deviceAuthenticationFilter = deviceAuthenticationFilter;
     }
 
     @Bean
@@ -94,6 +102,8 @@ public class SecurityConfig {
                                                 .withDefaults()
                                                 .matcher(POST, "/api/auth/login")
                                 ).permitAll()
+
+                                .requestMatchers(PathPatternRequestMatcher.withDefaults().matcher(POST, "/api/devices/exchange")).permitAll()
 
                                 .requestMatchers(PathPatternRequestMatcher.withDefaults().matcher(POST, "/api/auth/activate")).permitAll()
 
@@ -138,6 +148,10 @@ public class SecurityConfig {
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
+                )
+                .addFilterBefore(
+                        deviceAuthenticationFilter,
+                        JwtAuthenticationFilter.class
                 );
 
         return http.build();

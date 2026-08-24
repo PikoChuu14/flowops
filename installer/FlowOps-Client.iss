@@ -1,11 +1,14 @@
 #define AppName "FlowOps Client"
 #define AppPublisher "FlowOps Contributors"
 #define AppId "{E19A26B7-8D54-4D17-9B90-A56A8F82E91B}"
+#ifndef AppVersion
+#define AppVersion "1.1.2"
+#endif
 
 [Setup]
 AppId={{#AppId}
 AppName={#AppName}
-AppVersion=1.0.0
+AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\FlowOps Client
 DefaultGroupName=FlowOps
@@ -20,11 +23,16 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 VersionInfoDescription=FlowOps lightweight Windows client installer
+VersionInfoVersion={#AppVersion}
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "..\client\FlowOps-Client.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\client\FlowOps-Client.ps1"; Flags: dontcopy
 Source: "FlowOps.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "native\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\artifacts\agent\win-x64\*"; DestDir: "{app}"; Excludes: "*.pdb,FlowOps-Client.ps1,FlowOps.ico"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Dirs]
 Name: "{localappdata}\FlowOps Client"
@@ -32,14 +40,19 @@ Name: "{localappdata}\FlowOps Client"
 [Icons]
 Name: "{group}\FlowOps"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\FlowOps-Client.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\FlowOps.ico"; IconIndex: 0
 Name: "{group}\Configure FlowOps Client"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\FlowOps-Client.ps1"" -Configure"; WorkingDir: "{app}"; IconFilename: "{app}\FlowOps.ico"; IconIndex: 0
+Name: "{group}\FlowOps Notification Agent"; Filename: "{app}\FlowOps.NotificationAgent.exe"; WorkingDir: "{app}"; IconFilename: "{app}\FlowOps.ico"; IconIndex: 0
 Name: "{userdesktop}\FlowOps"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\FlowOps-Client.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\FlowOps.ico"; IconIndex: 0; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
+Name: "agentautostart"; Description: "Start FlowOps Notification Agent when I sign in to Windows"; GroupDescription: "Background notifications:"; Flags: checkedonce
 
-[UninstallDelete]
-Type: files; Name: "{localappdata}\FlowOps Client\server-url.txt"
-Type: dirifempty; Name: "{localappdata}\FlowOps Client"
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "FlowOps Notification Agent"; ValueData: """{app}\FlowOps.NotificationAgent.exe"""; Flags: uninsdeletevalue; Tasks: agentautostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "FlowOps Notification Agent"; Flags: deletevalue; Tasks: not agentautostart
+
+[UninstallRun]
+Filename: "{cmd}"; Parameters: "/c taskkill /IM FlowOps.NotificationAgent.exe /F"; Flags: runhidden waituntilterminated; RunOnceId: "StopNotificationAgent"
 
 [Code]
 var
@@ -130,8 +143,11 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ConfigPath: String;
+  Code: Integer;
 begin
-  if CurStep = ssPostInstall then
+  if CurStep = ssInstall then
+    Exec(ExpandConstant('{cmd}'), '/c taskkill /IM FlowOps.NotificationAgent.exe /F', '', SW_HIDE, ewWaitUntilTerminated, Code)
+  else if CurStep = ssPostInstall then
   begin
     ConfigPath := ExpandConstant('{localappdata}\FlowOps Client\server-url.txt');
     if not SaveStringToFile(ConfigPath, Trim(ServerPage.Values[0]), False) then
@@ -139,5 +155,23 @@ begin
       MsgBox('The FlowOps server address could not be saved.', mbError, MB_OK);
       Abort;
     end;
+    { Always restore the tray agent after an install/repair. The autostart task
+      only controls future sign-ins and must not control the current session. }
+    Exec(ExpandConstant('{app}\FlowOps.NotificationAgent.exe'), '',
+      ExpandConstant('{app}'), SW_HIDE, ewNoWait, Code);
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  ExistingConfig: String;
+  ExistingValue: AnsiString;
+begin
+  if (CurPageID = ServerPage.ID) then
+  begin
+    ExistingConfig := ExpandConstant('{localappdata}\FlowOps Client\server-url.txt');
+    if FileExists(ExistingConfig) then
+      if LoadStringFromFile(ExistingConfig, ExistingValue) then
+        ServerPage.Values[0] := String(ExistingValue);
   end;
 end;

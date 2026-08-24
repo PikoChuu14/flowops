@@ -72,7 +72,7 @@ function PersonalKanban({ user, users = [], departments = [] }) {
       }
 
       const rect = taskElement.getBoundingClientRect();
-      if (user?.role === "STAFF" && taskElement.dataset.personalStatus === "DONE") {
+      if (user?.role === "STAFF" && !task.generalTask && taskElement.dataset.personalStatus === "DONE") {
         return null;
       }
       return {
@@ -85,6 +85,7 @@ function PersonalKanban({ user, users = [], departments = [] }) {
     const columnElement = element?.closest("[data-personal-status]");
     if (
       user?.role === "STAFF" &&
+      !task.generalTask &&
       columnElement?.dataset.personalStatus === "DONE"
     ) {
       return null;

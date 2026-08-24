@@ -26,6 +26,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.time.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class TaskService {
@@ -36,14 +39,17 @@ public class TaskService {
     private final DepartmentRepository departmentRepository;
     private final AuthorizationService authorizationService;
     private final NotificationService notificationService;
+    private final int doneVisibleDays;
 
+    @Autowired
     public TaskService(
             TaskRepository taskRepository,
             KanbanColumnRepository kanbanColumnRepository,
             UserRepository userRepository,
             DepartmentRepository departmentRepository,
             AuthorizationService authorizationService,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            @Value("${app.tasks.done-visible-days:7}") int doneVisibleDays) {
 
         this.taskRepository = taskRepository;
         this.kanbanColumnRepository = kanbanColumnRepository;
@@ -51,6 +57,14 @@ public class TaskService {
         this.departmentRepository = departmentRepository;
         this.authorizationService = authorizationService;
         this.notificationService = notificationService;
+        this.doneVisibleDays = doneVisibleDays;
+    }
+
+    TaskService(TaskRepository taskRepository, KanbanColumnRepository kanbanColumnRepository,
+                UserRepository userRepository, DepartmentRepository departmentRepository,
+                AuthorizationService authorizationService, NotificationService notificationService) {
+        this(taskRepository, kanbanColumnRepository, userRepository, departmentRepository,
+                authorizationService, notificationService, 7);
     }
 
     @Transactional(readOnly = true)
@@ -62,7 +76,7 @@ public class TaskService {
         authorizationService.requireColumnAccess(currentUser, column);
 
         return taskRepository
-                .findByColumnIdOrderByPositionAsc(columnId)
+                .findActiveByColumnId(columnId, activeDoneCutoff())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -72,9 +86,7 @@ public class TaskService {
     public List<TaskResponse> getMyTasks(User currentUser) {
 
         return taskRepository
-                .findByAssigneeIdOrderByStatusAscPositionAsc(
-                        currentUser.getId()
-                )
+                .findActiveByAssigneeId(currentUser.getId(), activeDoneCutoff())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -87,7 +99,7 @@ public class TaskService {
                         HttpStatus.NOT_FOUND, "User not found"));
         authorizationService.requireStaffViewerAccess(currentUser, staffUser);
 
-        return taskRepository.findByAssigneeIdOrderByStatusAscPositionAsc(userId)
+        return taskRepository.findActiveByAssigneeId(userId, activeDoneCutoff())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -96,7 +108,7 @@ public class TaskService {
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasksByDepartment(Long departmentId, User currentUser) {
         authorizationService.requireDepartmentAccess(currentUser, departmentId);
-        return taskRepository.findByEffectiveDepartmentId(departmentId).stream()
+        return taskRepository.findActiveByEffectiveDepartmentId(departmentId, activeDoneCutoff()).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -220,14 +232,6 @@ public class TaskService {
 
         if (!Objects.equals(oldAssignee == null ? null : oldAssignee.getId(), assignee == null ? null : assignee.getId())) {
             if (assignee != null) notificationService.notifyTaskReassigned(savedTask, oldAssignee, assignee, currentUser);
-        } else {
-            List<String> changes = new ArrayList<>();
-            if (!Objects.equals(oldTitle, request.title())) changes.add("Title");
-            if (!Objects.equals(oldDescription, request.description())) changes.add("Description");
-            if (!Objects.equals(oldPriority, request.priority())) changes.add("Priority");
-            if (!Objects.equals(oldDueDate, request.dueDate())) changes.add("Due date");
-            if (!Objects.equals(oldWorkload, request.workload())) changes.add("Workload");
-            if (!changes.isEmpty()) notificationService.notifyTaskUpdated(savedTask, currentUser, String.join(", ", changes));
         }
 
         return toResponse(savedTask);
@@ -553,6 +557,7 @@ public class TaskService {
 
                 task.getCreatedAt(),
                 task.getUpdatedAt(),
+                task.getCompletedAt(),
 
                 department == null ? null : department.getId(),
                 department == null ? null : department.getName(),
@@ -620,5 +625,10 @@ public class TaskService {
         for (int i = 0; i < tasks.size(); i++) {
             tasks.get(i).setPosition(i + 1);
         }
+    }
+
+    private LocalDateTime activeDoneCutoff() {
+        return LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur"))
+                .minusDays(doneVisibleDays).atStartOfDay();
     }
 }

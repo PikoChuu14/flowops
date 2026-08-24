@@ -13,5 +13,6 @@ public record NotificationResponse(
         Long taskId,
         Long boardId,
         Long dailyReportId,
-        Long rawMaterialArrivalId
+        Long rawMaterialArrivalId,
+        String destination
 ) {}

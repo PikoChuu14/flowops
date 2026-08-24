@@ -121,9 +121,9 @@ class TaskServiceGeneralTaskTest {
     void myKanbanIncludesGeneralTaskWhileProjectColumnDoesNot() {
         Task general = generalTask(TaskStatus.DRAFT);
         Task project = projectTask();
-        when(tasks.findByAssigneeIdOrderByStatusAscPositionAsc(1L)).thenReturn(List.of(general, project));
+        when(tasks.findActiveByAssigneeId(eq(1L), any())).thenReturn(List.of(general, project));
         when(columns.findById(40L)).thenReturn(Optional.of(project.getColumn()));
-        when(tasks.findByColumnIdOrderByPositionAsc(40L)).thenReturn(List.of(project));
+        when(tasks.findActiveByColumnId(eq(40L), any())).thenReturn(List.of(project));
 
         assertEquals(2, service.getMyTasks(ppcStaff).size());
         List<com.company.kanban.dto.TaskResponse> boardTasks = service.getTasksByColumn(40L, ppcStaff);
@@ -144,6 +144,22 @@ class TaskServiceGeneralTaskTest {
         assertEquals(TaskStatus.REVIEW, response.status());
         assertNotNull(general.getSubmittedForReviewAt());
         verify(notifications).notifyReviewSubmitted(general, ppcStaff);
+    }
+
+    @Test
+    void staffCanCompleteGeneralTaskWithoutManagerApproval() {
+        Task general = generalTask(TaskStatus.DOING);
+        when(tasks.findById(100L)).thenReturn(Optional.of(general));
+        when(tasks.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(TaskStatus.DONE, 100L))
+                .thenReturn(List.of());
+        when(tasks.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(TaskStatus.DOING, 100L))
+                .thenReturn(List.of());
+
+        var response = service.updateTaskStatus(
+                100L, new UpdateTaskStatusRequest(TaskStatus.DONE, 1), ppcStaff);
+
+        assertEquals(TaskStatus.DONE, response.status());
+        verify(notifications, never()).notifyReviewSubmitted(any(), any());
     }
 
     @Test

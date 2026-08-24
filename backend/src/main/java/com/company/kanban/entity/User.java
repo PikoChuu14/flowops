@@ -3,6 +3,8 @@ package com.company.kanban.entity;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -41,6 +43,12 @@ public class User {
 
     @Column(nullable = false, columnDefinition = "timestamp default CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserDevice> notificationDevices = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DeviceRegistrationCode> deviceRegistrationCodes = new ArrayList<>();
 
     public User() {
     }

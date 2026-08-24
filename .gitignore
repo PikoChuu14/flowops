@@ -9,6 +9,10 @@ target/
 
 # Node / React
 node_modules/
+.tools/
+artifacts/agent/
+agent/**/bin/
+agent/**/obj/
 dist/
 
 # IDE

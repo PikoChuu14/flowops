@@ -25,11 +25,29 @@ import ClientAccessPage from "./pages/ClientAccessPage";
 import ActivationPage from "./pages/ActivationPage";
 import PpcPlanningPage from "./pages/PpcPlanningPage";
 import RawMaterialArrivalsPage from "./pages/RawMaterialArrivalsPage";
+import DesktopNotificationsPage from "./pages/DesktopNotificationsPage";
+import CompletedTasksPage from "./pages/CompletedTasksPage";
 import { apiFetch } from "./api/apiFetch";
 import { useAuth } from "./context/AuthContext";
 
 const API_BASE_URL = "";
 const DRAG_START_THRESHOLD = 6;
+
+function viewForLocation() {
+  const path = window.location.pathname;
+  const hasTaskTarget = path === "/" && new URLSearchParams(window.location.search).has("taskId");
+  if (path === "/settings/desktop-notifications") return "desktop-notifications";
+  if (path === "/completed") return "completed";
+  if (path === "/ppc/planning") return "ppc-planning";
+  if (path === "/ppc/raw-material-arrivals") return "ppc-arrivals";
+  if (path === "/reviews") return "reviews";
+  if (path === "/projects") return "project";
+  if (path.startsWith("/reports")) return "report";
+  if (path === "/admin/users") return "users-admin";
+  if (path === "/admin/settings/data-management") return "data-management";
+  if (path === "/admin/settings/client-access") return "client-access";
+  return hasTaskTarget ? "personal" : "dashboard";
+}
 
 function TaskCardContent({ task }) {
   return (
@@ -59,7 +77,7 @@ function App() {
   const isManager = user?.role === "MANAGER";
   const canManageBoards = isAdmin || isManager;
   const canDeleteTask = isAdmin || isManager;
-  const initialView = window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/ppc/raw-material-arrivals" ? "ppc-arrivals" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : window.location.pathname.startsWith("/reports/monthly") ? "report" : "dashboard";
+  const initialView = viewForLocation();
   const [activeView, setActiveView] = useState(initialView);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [staffRefreshKey, setStaffRefreshKey] = useState(0);
@@ -69,6 +87,7 @@ function App() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState(null);
   const [boards, setBoards] = useState([]);
   const [selectedBoardId, setSelectedBoardId] = useState(null);
+  const routeBoardId = Number(new URLSearchParams(window.location.search).get("boardId")) || null;
   const [showCreateBoard, setShowCreateBoard] = useState(false);
   const [boardToEdit, setBoardToEdit] = useState(null);
   const [boardToDelete, setBoardToDelete] = useState(null);
@@ -160,7 +179,7 @@ function App() {
     // Permission errors are handled silently in the workspace. Clear any
     // stale message when switching accounts or roles.
     setPermissionMessage("");
-    setActiveView(window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/ppc/raw-material-arrivals" ? "ppc-arrivals" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard");
+    setActiveView(viewForLocation());
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -241,9 +260,9 @@ function App() {
 
   useEffect(() => {
     if (selectedDepartmentId !== null) {
-      loadBoards(selectedDepartmentId);
+      loadBoards(selectedDepartmentId, activeView === "project" ? routeBoardId : null);
     }
-  }, [selectedDepartmentId, loadBoards]);
+  }, [activeView, selectedDepartmentId, loadBoards, routeBoardId]);
 
   useEffect(() => {
     if (selectedBoardId === "general") {
@@ -673,7 +692,7 @@ function App() {
         if (view === "dashboard") setStaffRefreshKey((currentKey) => currentKey + 1);
         if (view === "report") { setSelectedReportUserId(null); setSelectedReportDate(null); }
         setActiveView(view);
-        const path=view==='ppc-planning'?'/ppc/planning':view==='ppc-arrivals'?'/ppc/raw-material-arrivals':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':view==='report'?'/reports/monthly':'/';
+        const path=view==='completed'?'/completed':view==='desktop-notifications'?'/settings/desktop-notifications':view==='ppc-planning'?'/ppc/planning':view==='ppc-arrivals'?'/ppc/raw-material-arrivals':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':view==='report'?'/reports/monthly':'/';
         window.history.pushState({},'',path);
       }}
       onNotificationNavigate={(notification) => {
@@ -705,7 +724,11 @@ function App() {
       onLogout={logout}
     >
     <div className="app">
-      {activeView === "users-admin" && isAdmin ? (
+      {activeView === "completed" ? (
+        <CompletedTasksPage />
+      ) : activeView === "desktop-notifications" ? (
+        <DesktopNotificationsPage />
+      ) : activeView === "users-admin" && isAdmin ? (
         <UserManagementPage departments={departments} onDepartmentCreated={handleDepartmentCreated} />
       ) : activeView === "data-management" && isAdmin ? (
         <DataManagementPage />
@@ -729,7 +752,7 @@ function App() {
         )
       ) : activeView === "dashboard" ? (
         user?.role === "STAFF" ? (
-          <StaffDashboard user={user} refreshKey={staffRefreshKey} onOpenKanban={() => setActiveView("personal")} onOpenReport={() => { setSelectedReportUserId(user.userId); setSelectedReportDate(null); setActiveView("report"); }} />
+          <StaffDashboard user={user} refreshKey={staffRefreshKey} onOpenKanban={() => setActiveView("personal")} onOpenReport={() => { setSelectedReportUserId(user.userId); setSelectedReportDate(null); setActiveView("report"); }} onOpenPlanning={() => setActiveView("ppc-planning")} onOpenRawMaterials={() => setActiveView("ppc-arrivals")} />
         ) : user?.role === "ADMIN" ? (
           <AdminDashboard
             user={user}
@@ -753,6 +776,8 @@ function App() {
             onOpenKanban={() => setActiveView("personal")}
             onOpenReport={() => { setSelectedReportUserId(null); setSelectedReportDate(null); setActiveView("report"); }}
             onOpenReviews={() => setActiveView("reviews")}
+            onOpenPlanning={() => setActiveView("ppc-planning")}
+            onOpenRawMaterials={() => setActiveView("ppc-arrivals")}
             onViewKanban={(staffId) => {
               setSelectedStaffId(String(staffId));
               setActiveView("staff");

@@ -32,6 +32,9 @@ public class Notification {
     private Long dailyReportId;
     private Long rawMaterialArrivalId;
 
+    @Column(length = 500)
+    private String destination;
+
     @Column(name = "is_read", nullable = false)
     private boolean read;
 
@@ -71,6 +74,8 @@ public class Notification {
     public Long getBoardId() { return boardId; }
     public Long getDailyReportId() { return dailyReportId; }
     public Long getRawMaterialArrivalId() { return rawMaterialArrivalId; }
+    public String getDestination() { return destination; }
+    public void setDestination(String destination) { this.destination = destination; }
     public boolean isRead() { return read; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getClearedAt() { return clearedAt; }

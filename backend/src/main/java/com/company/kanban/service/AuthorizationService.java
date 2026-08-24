@@ -100,6 +100,7 @@ public class AuthorizationService {
         requirePersonalTaskAccess(user, task);
 
         if (user.getRole() == Role.STAFF
+                && !task.isGeneralTask()
                 && targetStatus == com.company.kanban.entity.TaskStatus.DONE) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,

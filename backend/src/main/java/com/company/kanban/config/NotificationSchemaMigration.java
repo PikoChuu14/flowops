@@ -21,9 +21,11 @@ public class NotificationSchemaMigration implements ApplicationRunner {
         jdbcTemplate.execute("ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check");
         jdbcTemplate.execute("ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN (" +
                 "'TASK_CREATED','TASK_ASSIGNED','TASK_UPDATED','TASK_REASSIGNED'," +
+                "'TASK_DUE_TOMORROW','TASK_DUE_TODAY','TASK_OVERDUE'," +
                 "'TASK_REVIEW_SUBMITTED','TASK_REVIEW_RETURNED','TASK_APPROVED'," +
                 "'PROJECT_CREATED','DAILY_REPORT_SUBMITTED'," +
                 "'RAW_MATERIAL_ARRIVING_TOMORROW','RAW_MATERIAL_DUE_TODAY'," +
-                "'RAW_MATERIAL_DELAYED','RAW_MATERIAL_FOLLOW_UP_DUE'))");
+                "'RAW_MATERIAL_DELAYED','RAW_MATERIAL_FOLLOW_UP_DUE'," +
+                "'MONTHLY_REPORT_3_DAY_REMINDER','MONTHLY_REPORT_MONTH_END','MONTHLY_REPORT_OVERDUE'))");
     }
 }

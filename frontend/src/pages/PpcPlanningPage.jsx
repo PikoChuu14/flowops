@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -51,6 +51,8 @@ function PlanningModal({ item, initialDate, onClose, onSaved, onDeleted }) {
 
 export default function PpcPlanningPage() {
   const today = useMemo(() => new Date(), []);
+  const calendarRef = useRef(null);
+  const calendarContainerRef = useRef(null);
   const [items, setItems] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [modal, setModal] = useState(null); const [calendarMonth, setCalendarMonth] = useState("");
   const loadMonth = useCallback(async (date) => {
     const year = date.getFullYear(); const month = date.getMonth() + 1;
@@ -69,6 +71,24 @@ export default function PpcPlanningPage() {
     catch (saveError) { eventInfo.revert(); setError(saveError.message); }
   }, []);
   useEffect(() => { if (!calendarMonth) loadMonth(today); }, [calendarMonth, loadMonth, today]);
+  useEffect(() => {
+    const container = calendarContainerRef.current;
+    if (!container) return undefined;
+
+    let frame;
+    const updateCalendarSize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => calendarRef.current?.getApi().updateSize());
+    };
+    const observer = new ResizeObserver(updateCalendarSize);
+    observer.observe(container);
+    updateCalendarSize();
+
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
   const events = useMemo(() => items.map(planningItemToEvent), [items]);
   const upsert = (saved) => { setItems((current) => current.some((entry) => entry.id === saved.id) ? current.map((entry) => entry.id === saved.id ? saved : entry) : [...current, saved]); setModal(null); };
   const removeItem = (id) => { setItems((current) => current.filter((entry) => entry.id !== id)); setModal(null); };
@@ -76,7 +96,7 @@ export default function PpcPlanningPage() {
   return <section className="ppc-planning-page">
     <div className="admin-page-heading"><div><p className="eyebrow">PPC / Planning</p><h1>Planning Calendar</h1><p>Coordinate production planning across the month.</p></div><button type="button" className="primary-button" onClick={() => setModal({ initialDate: dateKey(today) })}>+ Add planning item</button></div>
     {error && <div className="admin-message error">{error}</div>}
-    <div className="planning-calendar-card"><div className="planning-calendar-scroll"><FullCalendar plugins={[dayGridPlugin, interactionPlugin]} initialView="dayGridMonth" firstDay={1} weekends editable eventDurationEditable eventStartEditable height="auto" headerToolbar={{ left: "today prev", center: "title", right: "next" }} buttonText={{ today: "Today" }} events={events} dayMaxEvents dateClick={(info) => setModal({ initialDate: info.dateStr })} eventClick={(info) => setModal({ item: info.event.extendedProps.item })} eventDrop={updateDates} eventResize={updateDates} datesSet={handleDatesSet} eventContent={(info) => { const item = info.event.extendedProps.item || {}; return <div className="flowops-calendar-event"><span className="planning-item-title">{info.event.title}</span>{(item.priority || item.status) && <small>{item.priority || item.status}</small>}</div>; }} /></div>{loading && <div className="planning-loading">Loading planning items…</div>}</div>
+    <div className="planning-calendar-card"><div ref={calendarContainerRef} className="planning-calendar-scroll"><FullCalendar ref={calendarRef} plugins={[dayGridPlugin, interactionPlugin]} initialView="dayGridMonth" firstDay={1} weekends editable eventDurationEditable eventStartEditable height="auto" headerToolbar={{ left: "today prev", center: "title", right: "next" }} buttonText={{ today: "Today" }} events={events} dayMaxEvents dateClick={(info) => setModal({ initialDate: info.dateStr })} eventClick={(info) => setModal({ item: info.event.extendedProps.item })} eventDrop={updateDates} eventResize={updateDates} datesSet={handleDatesSet} eventContent={(info) => { const item = info.event.extendedProps.item || {}; return <div className="flowops-calendar-event"><span className="planning-item-title">{info.event.title}</span>{(item.priority || item.status) && <small>{item.priority || item.status}</small>}</div>; }} /></div>{loading && <div className="planning-loading">Loading planning items…</div>}</div>
     {modal && <PlanningModal {...modal} onClose={() => setModal(null)} onSaved={upsert} onDeleted={removeItem} />}
   </section>;
 }

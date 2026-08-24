@@ -57,7 +57,7 @@ public class RawMaterialNotificationService {
         users.findByStatus(AccountStatus.ACTIVE).stream()
                 .filter(u -> u.getDepartment()!=null && "PPC".equalsIgnoreCase(u.getDepartment().getName()))
                 .filter(u -> u.getRole()==Role.STAFF || u.getRole()==Role.MANAGER)
-                .forEach(u -> notifications.save(new Notification(u, kind, title, message, null, null, null, arrival.getId())));
+                .forEach(u -> { Notification n = new Notification(u, kind, title, message, null, null, null, arrival.getId()); n.setDestination("/ppc/raw-material-arrivals?arrivalId=" + arrival.getId()); notifications.save(n); });
     }
     private String format(LocalDate date){return date.getDayOfMonth()+" "+date.getMonth().toString().substring(0,1)+date.getMonth().toString().substring(1).toLowerCase()+" "+date.getYear();}
 }

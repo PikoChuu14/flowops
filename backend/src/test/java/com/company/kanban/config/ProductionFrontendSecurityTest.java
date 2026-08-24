@@ -28,7 +28,11 @@ class ProductionFrontendSecurityTest {
         assertIndex("/login");
         assertIndex("/dashboard");
         assertIndex("/projects");
+        assertIndex("/reviews?taskId=1");
         assertIndex("/reports");
+        assertIndex("/reports/monthly");
+        assertIndex("/ppc/raw-material-arrivals?arrivalId=1");
+        assertIndex("/settings/desktop-notifications");
         assertIndex("/activate?token=test");
         assertIndex("/admin/users");
         assertIndex("/admin/settings/data-management");
@@ -60,6 +64,7 @@ class ProductionFrontendSecurityTest {
                 "/api/admin/users",
                 "/api/admin/data-management/backups",
                 "/api/notifications",
+                "/api/agent/notifications",
                 "/api/reviews",
                 "/api/daily-reports/today",
                 "/api/not-a-real-endpoint"

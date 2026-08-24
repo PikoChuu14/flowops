@@ -1,5 +1,7 @@
 # Installer deployment (technical)
 
+The client installer also carries a self-contained .NET 8 FlowOps Notification Agent. Run `scripts\publish-agent.ps1` before compiling `installer\FlowOps-Client.iss`. The default-checked per-user startup option uses HKCU Run and needs no administrator privileges at sign-in.
+
 There are two separate Inno Setup packages. `FlowOps-Setup-<version>.exe` is the full server installer and belongs on one central server only. `FlowOps-Client-Setup.exe` is the lightweight employee-PC launcher and never includes the backend, Java, PostgreSQL, a service, backups, or secrets.
 
 The server installer places the JAR and a private Java 21 runtime under `C:\Program Files\FlowOps`, while writable configuration, secrets, logs, backups and runtime state live under `C:\ProgramData\FlowOps`.
