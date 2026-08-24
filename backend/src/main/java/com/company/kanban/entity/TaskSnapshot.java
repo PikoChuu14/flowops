@@ -35,8 +35,8 @@ public class TaskSnapshot {
     private String assigneeName;
     private Long createdById;
     private String createdByName;
-    @Column(name = "board_id", nullable = false) private Long boardId;
-    @Column(nullable = false) private String boardName;
+    @Column(name = "board_id") private Long boardId;
+    private String boardName;
     @Column(name = "department_id", nullable = false) private Long departmentId;
     @Column(nullable = false) private String departmentName;
     private String columnName;
@@ -53,11 +53,16 @@ public class TaskSnapshot {
         this.priority = task.getPriority();
         this.dueDate = task.getDueDate();
         this.position = task.getPosition();
-        this.columnName = task.getColumn().getName();
-        this.boardId = task.getColumn().getBoard().getId();
-        this.boardName = task.getColumn().getBoard().getName();
-        this.departmentId = task.getColumn().getBoard().getDepartment().getId();
-        this.departmentName = task.getColumn().getBoard().getDepartment().getName();
+        Department department = task.getDepartment();
+        if (task.getColumn() != null) {
+            this.columnName = task.getColumn().getName();
+            this.boardId = task.getColumn().getBoard().getId();
+            this.boardName = task.getColumn().getBoard().getName();
+        } else {
+            this.columnName = task.getStatus().name();
+        }
+        this.departmentId = department.getId();
+        this.departmentName = department.getName();
         if (task.getAssignee() != null) {
             this.assigneeId = task.getAssignee().getId();
             this.assigneeName = task.getAssignee().getName();

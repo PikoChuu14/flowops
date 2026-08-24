@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api/apiFetch";
-import { activeTasks, activeWorkload, countStatus, dueLabel, formatDueDate, getJson, malaysiaToday, timeGreeting } from "./dashboardUtils";
+import { activeTasks, countStatus, dueLabel, formatDueDate, getJson, malaysiaToday, timeGreeting } from "./dashboardUtils";
 
 function StaffDashboard({ user, refreshKey, onOpenKanban, onOpenReport }) {
   const [tasks, setTasks] = useState([]);
@@ -45,7 +45,7 @@ function StaffDashboard({ user, refreshKey, onOpenKanban, onOpenReport }) {
   return <section className="dashboard-page">
     <div className="dashboard-hero"><div><h1 className="personal-greeting">{timeGreeting(user.name)}</h1></div><button className="primary-button" onClick={onOpenKanban}>Open My Kanban</button></div>
     <div className="kpi-grid">
-      <Kpi label="Active workload" value={activeWorkload(tasks)} detail="Draft, Doing and Review" />
+      <Kpi label="My tasks" value={active.length} detail="To Do, In Progress and Review" />
       <Kpi label="Doing" value={statusCount("DOING")} detail="In progress now" />
       <Kpi label="Waiting for review" value={statusCount("REVIEW")} detail="Awaiting manager action" />
       <Kpi label="Due soon / overdue" value={active.filter((task) => dueLabel(task)).length} detail="Next 3 days" tone={active.some((task) => dueLabel(task)) ? "warning" : ""} />

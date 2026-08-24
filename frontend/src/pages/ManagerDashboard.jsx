@@ -65,10 +65,12 @@ function ManagerDashboard({ user, refreshKey, onViewKanban, onViewProject, onOpe
   const myActive = activeTasks(myTasks);
   const myAttention = myActive.filter((task) => task.status === "REVIEW" || dueLabel(task)).sort((a, b) => attentionRank(a) - attentionRank(b)).slice(0, 5);
   const myCurrent = myTasks.filter((task) => task.status === "DOING").concat(myTasks.filter((task) => task.status === "DRAFT")).slice(0, 5);
+  const myTaskCount = myActive.length + review.length;
+
   return <section className="dashboard-page">
     <div className="dashboard-hero"><div><h1 className="personal-greeting">{timeGreeting(user.name)}</h1></div></div>
     <div className="manager-personal-heading"><div><p className="eyebrow">Your work</p><h2>My work today</h2></div></div>
-    <div className="kpi-grid manager-personal-kpis"><Kpi label="My active workload" value={activeWorkload(myTasks)} detail="Your Draft, Doing and Review" /><Kpi label="My doing" value={countStatus(myTasks, "DOING")} detail="In progress now" /><Kpi label="My review" value={countStatus(myTasks, "REVIEW")} detail="Waiting for action" /><Kpi label="My deadlines" value={myActive.filter((task) => dueLabel(task)).length} detail="Next 3 days" tone={myActive.some((task) => dueLabel(task)) ? "warning" : ""} /></div>
+    <div className="kpi-grid manager-personal-kpis"><Kpi label="My tasks" value={myTaskCount} detail="To Do, In Progress and Review" /><Kpi label="My doing" value={countStatus(myTasks, "DOING")} detail="In progress now" /><Kpi label="Team review" value={review.length} detail="Staff tasks awaiting action" /><Kpi label="My deadlines" value={myActive.filter((task) => dueLabel(task)).length} detail="Next 3 days" tone={myActive.some((task) => dueLabel(task)) ? "warning" : ""} /></div>
     <div className="dashboard-columns manager-personal-grid"><DashboardPanel title="My current work"><ManagerTaskList tasks={myCurrent} /><button type="button" className="primary-button dashboard-open-button" onClick={onOpenKanban}>Open My Kanban</button></DashboardPanel><DashboardPanel title="My needs attention">{myAttention.length ? <ManagerTaskList tasks={myAttention} showBadges /> : <Empty text="Nothing needs your attention right now." />}</DashboardPanel></div>
     <DashboardPanel title="My today's progress"><ManagerProgress snapshot={mySnapshot} current={myTasks} /></DashboardPanel>
     <div className="manager-personal-heading team-section-heading"><div><p className="eyebrow">Department view</p><h2>Team operations</h2></div></div>

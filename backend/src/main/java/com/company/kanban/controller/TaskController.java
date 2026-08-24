@@ -55,6 +55,13 @@ public class TaskController {
         return taskService.getTasksByUser(userId, currentUser);
     }
 
+    @GetMapping("/department/{departmentId}")
+    public List<TaskResponse> getTasksByDepartment(
+            @PathVariable Long departmentId,
+            @AuthenticationPrincipal User currentUser) {
+        return taskService.getTasksByDepartment(departmentId, currentUser);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TaskResponse createTask(

@@ -22,6 +22,7 @@ import UserManagementPage from "./pages/UserManagementPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import ClientAccessPage from "./pages/ClientAccessPage";
 import ActivationPage from "./pages/ActivationPage";
+import PpcPlanningPage from "./pages/PpcPlanningPage";
 import { apiFetch } from "./api/apiFetch";
 import { useAuth } from "./context/AuthContext";
 
@@ -35,7 +36,7 @@ function TaskCardContent({ task }) {
 
       <p>{task.description}</p>
 
-      {task.boardName && <small className="task-board-name">{task.boardName}</small>}
+      <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
 
       <div className="task-meta">
         <span>{task.priority} · Workload {task.workload ?? "—"}</span>
@@ -56,7 +57,7 @@ function App() {
   const isManager = user?.role === "MANAGER";
   const canManageBoards = isAdmin || isManager;
   const canDeleteTask = isAdmin || isManager;
-  const initialView = window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard";
+  const initialView = window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard";
   const [activeView, setActiveView] = useState(initialView);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [staffRefreshKey, setStaffRefreshKey] = useState(0);
@@ -74,8 +75,10 @@ function App() {
 
   const [columns, setColumns] = useState([]);
   const [tasksByColumn, setTasksByColumn] = useState({});
+  const [generalTasks, setGeneralTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedColumn, setSelectedColumn] = useState(null);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToReassign, setTaskToReassign] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
@@ -92,6 +95,8 @@ function App() {
   const selectedStaff = users.find(
     (candidate) => candidate.id === Number(selectedStaffId)
   ) ?? null;
+  const selectedDepartment = departments.find((department) => department.id === selectedDepartmentId);
+  const canShowGeneralBoard = selectedDepartment?.name?.toUpperCase() === "PPC";
 
   const loadBoard = useCallback(async (boardId) => {
     try {
@@ -133,6 +138,18 @@ function App() {
     }
   }, []);
 
+  const loadGeneralTasks = useCallback(async (departmentId) => {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/tasks/department/${departmentId}`);
+      if (!response.ok) throw new Error(`General tasks request failed (${response.status}).`);
+      const data = await response.json();
+      setGeneralTasks(data.filter((task) => task.generalTask));
+    } catch (error) {
+      console.error("Failed to load general tasks:", error);
+      setGeneralTasks([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated || !user) {
       return;
@@ -141,7 +158,7 @@ function App() {
     // Permission errors are handled silently in the workspace. Clear any
     // stale message when switching accounts or roles.
     setPermissionMessage("");
-    setActiveView(window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard");
+    setActiveView(window.location.pathname === "/ppc/planning" ? "ppc-planning" : window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard");
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -212,10 +229,13 @@ function App() {
         setColumns([]);
         setTasksByColumn({});
       }
+      if (data.length === 0 && departments.find((department) => department.id === departmentId)?.name?.toUpperCase() === "PPC") {
+        setSelectedBoardId("general");
+      }
     } catch (error) {
       console.error("Failed to load boards:", error);
     }
-  }, []);
+  }, [departments]);
 
   useEffect(() => {
     if (selectedDepartmentId !== null) {
@@ -224,17 +244,21 @@ function App() {
   }, [selectedDepartmentId, loadBoards]);
 
   useEffect(() => {
-    if (selectedBoardId !== null) {
+    if (selectedBoardId === "general") {
+      loadGeneralTasks(selectedDepartmentId);
+      setColumns([]);
+      setTasksByColumn({});
+    } else if (selectedBoardId !== null) {
       loadBoard(selectedBoardId);
       return;
     }
 
     setColumns([]);
     setTasksByColumn({});
-  }, [activeView, selectedBoardId, loadBoard]);
+  }, [activeView, selectedBoardId, selectedDepartmentId, loadBoard, loadGeneralTasks]);
 
   useEffect(() => {
-    if (!isAuthenticated || selectedBoardId === null || !["project", "staff"].includes(activeView)) return undefined;
+    if (!isAuthenticated || selectedBoardId === null || selectedBoardId === "general" || !["project", "staff"].includes(activeView)) return undefined;
     const refresh = () => { if (document.visibilityState === "visible") loadBoard(selectedBoardId); };
     const interval = window.setInterval(refresh, 20000);
     window.addEventListener("focus", refresh);
@@ -516,10 +540,12 @@ function App() {
 
   function openCreateTaskModal(column) {
     setSelectedColumn(column);
+    setShowCreateTaskModal(true);
   }
 
   function closeCreateTaskModal() {
     setSelectedColumn(null);
+    setShowCreateTaskModal(false);
   }
 
   async function handleBoardCreated(createdBoard) {
@@ -645,7 +671,7 @@ function App() {
         if (view === "dashboard") setStaffRefreshKey((currentKey) => currentKey + 1);
         if (view === "report") { setSelectedReportUserId(null); setSelectedReportDate(null); }
         setActiveView(view);
-        const path=view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':'/';
+        const path=view==='ppc-planning'?'/ppc/planning':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':'/';
         window.history.pushState({},'',path);
       }}
       onNotificationNavigate={(notification) => {
@@ -680,6 +706,8 @@ function App() {
         <DataManagementPage />
       ) : activeView === "client-access" && isAdmin ? (
         <ClientAccessPage />
+      ) : activeView === "ppc-planning" && (isAdmin || user?.departmentName?.toUpperCase() === "PPC") ? (
+        <PpcPlanningPage />
       ) : activeView === "reviews" ? (
         <ReviewQueuePage onRefresh={() => setStaffRefreshKey((currentKey) => currentKey + 1)} />
       ) : activeView === "history" ? (
@@ -728,7 +756,7 @@ function App() {
           />
         )
       ) : activeView === "personal" ? (
-        <PersonalKanban user={user} />
+        <PersonalKanban user={user} users={users} departments={departments} />
       ) : activeView === "staff" ? (
         <>
           <div className="board-toolbar staff-selector-toolbar">
@@ -758,10 +786,7 @@ function App() {
         </>
       ) : (
         <>
-      <h1>
-        {boards.find((board) => board.id === selectedBoardId)?.name ||
-          "Company Kanban"}
-      </h1>
+      <h1>{selectedBoardId === "general" ? "General Tasks" : boards.find((board) => board.id === selectedBoardId)?.name || "Company Kanban"}</h1>
 
       <div className="board-toolbar">
         <div className="toolbar-field">
@@ -796,11 +821,10 @@ function App() {
           <select
             id="board-select"
             value={selectedBoardId ?? ""}
-            onChange={(event) =>
-              setSelectedBoardId(Number(event.target.value))
-            }
-            disabled={boards.length === 0}
-          >
+            onChange={(event) => setSelectedBoardId(event.target.value === "general" ? "general" : Number(event.target.value))}
+            disabled={boards.length === 0 && !canShowGeneralBoard}
+            >
+            {canShowGeneralBoard && <option value="general">General Tasks</option>}
             {boards.map((board) => (
               <option key={board.id} value={board.id}>
                 {board.name}
@@ -817,7 +841,7 @@ function App() {
               onClick={() => setBoardToEdit(
                 boards.find((board) => board.id === selectedBoardId) ?? null
               )}
-              disabled={selectedBoardId === null}
+              disabled={selectedBoardId === null || selectedBoardId === "general"}
             >
               Edit Board
             </button>
@@ -829,7 +853,7 @@ function App() {
                   boards.find((board) => board.id === selectedBoardId) ?? null
                 )
               }
-              disabled={selectedBoardId === null}
+              disabled={selectedBoardId === null || selectedBoardId === "general"}
             >
               Delete Board
             </button>
@@ -842,15 +866,40 @@ function App() {
             </button>
           </>
         )}
+        <button type="button" className="create-board-button" onClick={() => openCreateTaskModal(null)}>
+          + Add Task
+        </button>
       </div>
 
-      {selectedDepartmentId !== null && boards.length === 0 && (
+      {selectedDepartmentId !== null && boards.length === 0 && !canShowGeneralBoard && (
         <div className="empty-state">
           <p>No boards found for this department.</p>
         </div>
       )}
 
-      {selectedBoardId !== null && (
+      {selectedBoardId === "general" && (
+        <div className="kanban-board general-task-board">
+          {[
+            ["DRAFT", "To Do"],
+            ["DOING", "In Progress"],
+            ["REVIEW", "Review"],
+            ["DONE", "Done"],
+          ].map(([status, label]) => (
+            <div className="kanban-column" key={status}>
+              <div className="column-header">
+                <h2>{label}</h2>
+              </div>
+              <div className="task-list">
+                {generalTasks.filter((task) => task.status === status).map((task) => (
+                  <div key={task.id} className="task-card task-card--read-only"><TaskCardContent task={task} /></div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedBoardId !== null && selectedBoardId !== "general" && (
         <div className="kanban-board">
           {columns.map((column) => (
             <div
@@ -860,13 +909,6 @@ function App() {
             >
               <div className="column-header">
                 <h2>{column.name}</h2>
-                <button
-                  type="button"
-                  className="add-task-button"
-                  onClick={() => openCreateTaskModal(column)}
-                >
-                  + Add Task
-                </button>
               </div>
 
               <div className="task-list">
@@ -926,17 +968,22 @@ function App() {
         </>
       )}
 
-      {selectedColumn && (
+      {showCreateTaskModal && (
         <CreateTaskModal
           isOpen
           column={selectedColumn}
+          board={boards.find((board) => board.id === selectedBoardId) ?? null}
+          boards={boards}
+          departmentId={selectedDepartmentId}
+          canChooseGeneral={canShowGeneralBoard}
           users={users}
           user={user}
           onClose={closeCreateTaskModal}
-          onCreated={async () => {
+          onCreated={async (createdTask) => {
             setStaffRefreshKey((currentKey) => currentKey + 1);
-            if (selectedBoardId !== null) {
-              await loadBoard(selectedBoardId);
+            if (createdTask?.boardId) {
+              setSelectedBoardId(createdTask.boardId);
+              await loadBoard(createdTask.boardId);
             }
           }}
         />

@@ -20,7 +20,8 @@ public record TaskSnapshotResponse(
         return new TaskSnapshotResponse(snapshot.getTaskId(), snapshot.getTitle(), snapshot.getDescription(),
                 snapshot.getStatus(), snapshot.getWorkload(), snapshot.getPriority(), snapshot.getDueDate(),
                 snapshot.getPosition(), snapshot.getAssigneeId(), snapshot.getAssigneeName(),
-                snapshot.getCreatedById(), snapshot.getCreatedByName(), snapshot.getBoardId(), snapshot.getBoardName(),
+                snapshot.getCreatedById(), snapshot.getCreatedByName(), snapshot.getBoardId(),
+                snapshot.getBoardName() == null ? "General Task" : snapshot.getBoardName(),
                 snapshot.getDepartmentId(), snapshot.getDepartmentName(), snapshot.getColumnName(),
                 batch.getSnapshotType(), batch.getSnapshotDate(), batch.getCapturedAt(), batch.isRecovered());
     }

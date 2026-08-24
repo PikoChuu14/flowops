@@ -91,7 +91,7 @@ public class NotificationService {
     }
 
     public void notifyReviewSubmitted(Task task, User actor) {
-        userRepository.findByDepartmentIdAndRole(task.getColumn().getBoard().getDepartment().getId(), Role.MANAGER)
+        userRepository.findByDepartmentIdAndRole(task.getDepartment().getId(), Role.MANAGER)
                 .forEach(manager -> notifyUser(manager, actor, NotificationType.TASK_REVIEW_SUBMITTED, "Review requested",
                         actor.getName() + " submitted \"" + task.getTitle() + "\" for review.", task, null));
     }
@@ -128,7 +128,7 @@ public class NotificationService {
         if (recipient == null || actor == null || recipient.getId().equals(actor.getId())) return;
         notificationRepository.save(new Notification(recipient, type, title, message,
                 task == null ? null : task.getId(),
-                task == null ? boardId : task.getColumn().getBoard().getId(), dailyReportId));
+                task == null ? boardId : task.isGeneralTask() ? null : task.getColumn().getBoard().getId(), dailyReportId));
     }
 
     private Notification owned(Long id, User currentUser) {

@@ -62,7 +62,7 @@ public class DashboardService {
                 .findByAssigneeIdOrderByStatusAscPositionAsc(staffUser.getId());
 
         int totalWorkload = tasks.stream()
-                .filter(task -> task.getStatus() != TaskStatus.DONE)
+                .filter(task -> isActive(task))
                 .mapToInt(task -> task.getWorkload() == null ? 0 : task.getWorkload())
                 .sum();
 
@@ -73,7 +73,7 @@ public class DashboardService {
                 staffUser.getDepartment().getId(),
                 staffUser.getDepartment().getName(),
                 totalWorkload,
-                tasks.stream().filter(task -> task.getStatus() != TaskStatus.DONE).count(),
+                tasks.stream().filter(this::isActive).count(),
                 count(tasks, TaskStatus.DRAFT),
                 count(tasks, TaskStatus.DOING),
                 count(tasks, TaskStatus.REVIEW),
@@ -85,5 +85,11 @@ public class DashboardService {
         return tasks.stream()
                 .filter(task -> task.getStatus() == status)
                 .count();
+    }
+
+    private boolean isActive(Task task) {
+        return task.getStatus() == TaskStatus.DRAFT
+                || task.getStatus() == TaskStatus.DOING
+                || task.getStatus() == TaskStatus.REVIEW;
     }
 }

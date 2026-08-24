@@ -58,7 +58,8 @@ class DailyWorkReportServiceFallbackTest {
         when(tasks.findByAssigneeIdOrderByStatusAscPositionAsc(20L)).thenReturn(List.of(
                 task(101L, "Task A", TaskStatus.DOING, 2, date),
                 task(102L, "Task B", TaskStatus.REVIEW, 3, date),
-                task(103L, "Task C", TaskStatus.DRAFT, 1, date)
+                task(103L, "Task C", TaskStatus.DRAFT, 1, date),
+                generalTask(104L, "Supplier follow-up", TaskStatus.DOING, 2, date)
         ));
 
         var result = service.view(staff, 20L, date);
@@ -66,11 +67,13 @@ class DailyWorkReportServiceFallbackTest {
         assertEquals("CURRENT", result.rightHandSource());
         assertEquals("Start of Day -> Current", result.comparisonLabel());
         assertEquals(1, result.rightHandState().draftCount());
-        assertEquals(1, result.rightHandState().doingCount());
+        assertEquals(2, result.rightHandState().doingCount());
         assertEquals(1, result.rightHandState().reviewCount());
-        assertEquals(6, result.rightHandState().activeWorkload());
+        assertEquals(8, result.rightHandState().activeWorkload());
         assertEquals(List.of("Task B"), result.reviewTasks().stream().map(x -> x.title()).toList());
-        assertEquals(List.of("Task A", "Task C"), result.activeTasks().stream().map(x -> x.title()).toList());
+        assertEquals(List.of("Task A", "Supplier follow-up", "Task C"), result.activeTasks().stream().map(x -> x.title()).toList());
+        assertEquals("General Task", result.activeTasks().stream()
+                .filter(x -> x.title().equals("Supplier follow-up")).findFirst().orElseThrow().boardName());
     }
 
     @Test
@@ -171,5 +174,16 @@ class DailyWorkReportServiceFallbackTest {
 
     private TaskSnapshot snapshot(SnapshotBatch batch, Task task) {
         return new TaskSnapshot(batch, task);
+    }
+
+    private Task generalTask(Long id, String title, TaskStatus status, int workload, LocalDate updatedDate) {
+        Task task = new Task(title, "", Priority.MEDIUM, null, 1, null, staff);
+        task.setDepartment(staff.getDepartment());
+        task.setCreatedBy(staff);
+        task.setStatus(status);
+        task.setWorkload(workload);
+        ReflectionTestUtils.setField(task, "id", id);
+        ReflectionTestUtils.setField(task, "updatedAt", updatedDate.atTime(12, 0));
+        return task;
     }
 }
