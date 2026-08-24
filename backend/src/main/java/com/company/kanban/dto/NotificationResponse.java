@@ -12,5 +12,7 @@ public record NotificationResponse(
         LocalDateTime createdAt,
         Long taskId,
         Long boardId,
-        Long dailyReportId
+        Long dailyReportId,
+        Long rawMaterialArrivalId,
+        String destination
 ) {}

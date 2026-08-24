@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../api/apiFetch";
 import { activeTasks, activeWorkload, countStatus, dueLabel, formatDueDate, getJson, malaysiaToday, timeGreeting } from "./dashboardUtils";
 
-function ManagerDashboard({ user, refreshKey, onViewKanban, onViewProject, onOpenKanban, onOpenReport, onOpenReviews }) {
+function ManagerDashboard({ user, refreshKey, onViewKanban, onViewProject, onOpenKanban, onOpenReport, onOpenReviews, onOpenPlanning, onOpenRawMaterials }) {
+  if (user?.departmentName?.toUpperCase() === "PPC") return <PpcManagerDashboard user={user} refreshKey={refreshKey} onOpenKanban={onOpenKanban} onOpenPlanning={onOpenPlanning} onOpenRawMaterials={onOpenRawMaterials} onOpenReviews={onOpenReviews} onOpenReport={onOpenReport} />;
+  return <LegacyManagerDashboard user={user} refreshKey={refreshKey} onViewKanban={onViewKanban} onViewProject={onViewProject} onOpenKanban={onOpenKanban} onOpenReport={onOpenReport} onOpenReviews={onOpenReviews} />;
+}
+
+function LegacyManagerDashboard({ user, refreshKey, onViewKanban, onViewProject, onOpenKanban, onOpenReport, onOpenReviews }) {
   const [workload, setWorkload] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [myTasks, setMyTasks] = useState([]);
@@ -65,10 +70,12 @@ function ManagerDashboard({ user, refreshKey, onViewKanban, onViewProject, onOpe
   const myActive = activeTasks(myTasks);
   const myAttention = myActive.filter((task) => task.status === "REVIEW" || dueLabel(task)).sort((a, b) => attentionRank(a) - attentionRank(b)).slice(0, 5);
   const myCurrent = myTasks.filter((task) => task.status === "DOING").concat(myTasks.filter((task) => task.status === "DRAFT")).slice(0, 5);
+  const myTaskCount = myActive.length + review.length;
+
   return <section className="dashboard-page">
     <div className="dashboard-hero"><div><h1 className="personal-greeting">{timeGreeting(user.name)}</h1></div></div>
     <div className="manager-personal-heading"><div><p className="eyebrow">Your work</p><h2>My work today</h2></div></div>
-    <div className="kpi-grid manager-personal-kpis"><Kpi label="My active workload" value={activeWorkload(myTasks)} detail="Your Draft, Doing and Review" /><Kpi label="My doing" value={countStatus(myTasks, "DOING")} detail="In progress now" /><Kpi label="My review" value={countStatus(myTasks, "REVIEW")} detail="Waiting for action" /><Kpi label="My deadlines" value={myActive.filter((task) => dueLabel(task)).length} detail="Next 3 days" tone={myActive.some((task) => dueLabel(task)) ? "warning" : ""} /></div>
+    <div className="kpi-grid manager-personal-kpis"><Kpi label="My tasks" value={myTaskCount} detail="To Do, In Progress and Review" /><Kpi label="My doing" value={countStatus(myTasks, "DOING")} detail="In progress now" /><Kpi label="Team review" value={review.length} detail="Staff tasks awaiting action" /><Kpi label="My deadlines" value={myActive.filter((task) => dueLabel(task)).length} detail="Next 3 days" tone={myActive.some((task) => dueLabel(task)) ? "warning" : ""} /></div>
     <div className="dashboard-columns manager-personal-grid"><DashboardPanel title="My current work"><ManagerTaskList tasks={myCurrent} /><button type="button" className="primary-button dashboard-open-button" onClick={onOpenKanban}>Open My Kanban</button></DashboardPanel><DashboardPanel title="My needs attention">{myAttention.length ? <ManagerTaskList tasks={myAttention} showBadges /> : <Empty text="Nothing needs your attention right now." />}</DashboardPanel></div>
     <DashboardPanel title="My today's progress"><ManagerProgress snapshot={mySnapshot} current={myTasks} /></DashboardPanel>
     <div className="manager-personal-heading team-section-heading"><div><p className="eyebrow">Department view</p><h2>Team operations</h2></div></div>
@@ -82,9 +89,26 @@ function ManagerDashboard({ user, refreshKey, onViewKanban, onViewProject, onOpe
   </section>;
 }
 function Kpi({ label, value, detail, tone = "" }) { return <div className={`kpi-card ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>; }
-function DashboardPanel({ title, children }) { return <section className="dashboard-panel"><div className="panel-heading"><h2>{title}</h2></div>{children}</section>; }
+function DashboardPanel({ title, action, children }) { return <section className="dashboard-panel"><div className="panel-heading"><h2>{title}</h2>{action}</div>{children}</section>; }
 function Empty({ text }) { return <p className="dashboard-empty">{text}</p>; }
 function ManagerTaskList({ tasks, showBadges = false }) { if (!tasks.length) return <Empty text="No active tasks." />; return <div className="dashboard-task-list">{tasks.map((task) => <div className="dashboard-task" key={task.id}><div><strong>{task.title}</strong><small>{task.boardName || "Personal work"} · Workload {task.workload ?? "—"}{task.dueDate ? ` · ${formatDueDate(task.dueDate)}` : ""}</small></div>{showBadges && <div className="attention-badges">{task.status === "REVIEW" && <span className="attention-badge review">Waiting for review</span>}{dueLabel(task) && <span className={`attention-badge ${dueLabel(task) === "Overdue" ? "overdue" : "deadline"}`}>{dueLabel(task)}</span>}</div>}</div>)}</div>; }
 function ManagerProgress({ snapshot, current }) { if (!snapshot) return <Empty text="Start-of-day snapshot not available." />; return <div className="progress-comparison">{["DRAFT", "DOING", "REVIEW", "DONE"].map((status) => <div className="progress-row" key={status}><strong>{status[0] + status.slice(1).toLowerCase()}</strong><b>{countStatus(snapshot, status)}</b><span>→</span><b>{countStatus(current, status)}</b></div>)}</div>; }
 function attentionRank(task) { if (dueLabel(task) === "Overdue") return 1; if (dueLabel(task) === "Due today") return 2; if (dueLabel(task) === "Due tomorrow") return 3; if (dueLabel(task) === "Due soon") return 4; return 5; }
+function PpcManagerDashboard({ user, refreshKey, onOpenPlanning, onOpenRawMaterials, onOpenReviews, onOpenReport }) {
+  const [data, setData] = useState(null); const [state, setState] = useState("loading");
+  useEffect(() => { let cancelled = false; setState("loading"); apiFetch("/api/dashboard/ppc").then((r) => { if (!r.ok) throw new Error("dashboard"); return r.json(); }).then((value) => { if (!cancelled) { setData(value); setState("ready"); } }).catch(() => { if (!cancelled) setState("error"); }); return () => { cancelled = true; }; }, [refreshKey]);
+  if (state === "loading") return <section className="dashboard-page"><p className="dashboard-status">Loading your PPC team dashboard...</p></section>;
+  if (state === "error") return <section className="dashboard-page"><div className="dashboard-error">Unable to load PPC team dashboard.</div></section>;
+  const task = data.taskSummary; const raw = data.rawMaterialAttention; const report = data.monthlyReportStatus;
+  return <section className="dashboard-page"><div className="dashboard-hero"><div><h1 className="personal-greeting">{timeGreeting(user.name)}</h1><p className="greeting-subtitle">PPC department priorities and exceptions.</p></div></div>
+    <div className="kpi-grid"><Kpi label="Team active tasks" value={task.active} detail="Not done" /><Kpi label="Overdue tasks" value={task.overdue} detail="Highest risk first" tone={task.overdue ? "warning" : ""} /><Kpi label="Pending reviews" value={data.pendingReviews} detail="Manager action" tone={data.pendingReviews ? "warning" : ""} /></div>
+    <div className="dashboard-columns"><DashboardPanel title="Raw material status"><MetricLine label="Follow-up due" value={raw.followUpDue} /><MetricLine label="Delayed" value={raw.delayed} /><MetricLine label="Due today" value={raw.dueToday} /><MetricLine label="Arriving tomorrow" value={raw.arrivingTomorrow} />{raw.urgentItems?.length ? <div className="dashboard-task-list">{raw.urgentItems.map((item) => <div className="dashboard-task" key={item.id}><div><strong>{item.materialName}</strong><small>{item.attention}{item.delayDays ? ` · ${item.delayDays} days` : ""}</small></div></div>)}</div> : <Empty text="No material exceptions." />}<button className="primary-button dashboard-open-button" onClick={onOpenRawMaterials}>View Raw Material Arrival</button></DashboardPanel>
+      <DashboardPanel title="Overdue tasks">{data.overdueTasks?.length ? <div className="dashboard-task-list">{data.overdueTasks.map((item) => <div className="dashboard-task" key={item.id}><div><strong>{item.title}</strong><small>{item.assigneeName} · {item.overdueDays} day{item.overdueDays === 1 ? "" : "s"} overdue</small></div></div>)}</div> : <Empty text="No overdue tasks." />}</DashboardPanel></div>
+    <div className="dashboard-columns"><DashboardPanel title="Team workload">{data.teamWorkload?.length ? <div className="dashboard-task-list">{data.teamWorkload.map((item) => <div className="team-row" key={item.userId}><div><strong>{item.name}</strong><small>{item.activeTaskCount} active task{item.activeTaskCount === 1 ? "" : "s"}</small></div><b>{item.activeWorkload}</b></div>)}</div> : <Empty text="No active PPC staff." />}</DashboardPanel><DashboardPanel title="Upcoming planning" action={<button className="text-button" onClick={onOpenPlanning}>View Full Planning Calendar</button>}>{data.upcomingPlanning?.length ? <div className="dashboard-task-list">{data.upcomingPlanning.map((item) => <div className="dashboard-task" key={item.id}><div><strong>{item.title}</strong><small>{formatDateRange(item.startDate, item.endDate)}</small></div></div>)}</div> : <Empty text="No upcoming planning items." />}</DashboardPanel></div>
+    <DashboardPanel title="Monthly reports"><p><strong>{report.submitted} / {report.total} submitted</strong></p>{report.pendingNames?.length ? <small>Pending: {report.pendingNames.join(", ")}</small> : <Empty text="All monthly reports submitted." />}<button className="primary-button dashboard-open-button" onClick={onOpenReport}>View Monthly Reports</button></DashboardPanel>
+    <DashboardPanel title="Pending reviews">{data.pendingReviews ? <p>{data.pendingReviews} PPC task{data.pendingReviews === 1 ? "" : "s"} awaiting review.</p> : <Empty text="No pending reviews." />}<button className="primary-button dashboard-open-button" onClick={onOpenReviews}>Open Reviews</button></DashboardPanel>
+  </section>;
+}
+function MetricLine({ label, value }) { return <div className="progress-row"><strong>{label}</strong><b>{value}</b></div>; }
+function formatDateRange(start, end) { return start === end ? start : `${start} – ${end}`; }
 export default ManagerDashboard;

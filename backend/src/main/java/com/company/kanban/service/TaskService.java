@@ -10,10 +10,12 @@ import com.company.kanban.dto.ReviewActionRequest;
 import com.company.kanban.dto.ReassignTaskRequest;
 import com.company.kanban.dto.ReviewQueueItem;
 import com.company.kanban.entity.KanbanColumn;
+import com.company.kanban.entity.Department;
 import com.company.kanban.entity.Task;
 import com.company.kanban.entity.TaskStatus;
 import com.company.kanban.entity.User;
 import com.company.kanban.repository.KanbanColumnRepository;
+import com.company.kanban.repository.DepartmentRepository;
 import com.company.kanban.repository.TaskRepository;
 import com.company.kanban.repository.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -24,6 +26,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.time.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class TaskService {
@@ -31,21 +36,35 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final KanbanColumnRepository kanbanColumnRepository;
     private final UserRepository userRepository;
+    private final DepartmentRepository departmentRepository;
     private final AuthorizationService authorizationService;
     private final NotificationService notificationService;
+    private final int doneVisibleDays;
 
+    @Autowired
     public TaskService(
             TaskRepository taskRepository,
             KanbanColumnRepository kanbanColumnRepository,
             UserRepository userRepository,
+            DepartmentRepository departmentRepository,
             AuthorizationService authorizationService,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            @Value("${app.tasks.done-visible-days:7}") int doneVisibleDays) {
 
         this.taskRepository = taskRepository;
         this.kanbanColumnRepository = kanbanColumnRepository;
         this.userRepository = userRepository;
+        this.departmentRepository = departmentRepository;
         this.authorizationService = authorizationService;
         this.notificationService = notificationService;
+        this.doneVisibleDays = doneVisibleDays;
+    }
+
+    TaskService(TaskRepository taskRepository, KanbanColumnRepository kanbanColumnRepository,
+                UserRepository userRepository, DepartmentRepository departmentRepository,
+                AuthorizationService authorizationService, NotificationService notificationService) {
+        this(taskRepository, kanbanColumnRepository, userRepository, departmentRepository,
+                authorizationService, notificationService, 7);
     }
 
     @Transactional(readOnly = true)
@@ -57,7 +76,7 @@ public class TaskService {
         authorizationService.requireColumnAccess(currentUser, column);
 
         return taskRepository
-                .findByColumnIdOrderByPositionAsc(columnId)
+                .findActiveByColumnId(columnId, activeDoneCutoff())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -67,9 +86,7 @@ public class TaskService {
     public List<TaskResponse> getMyTasks(User currentUser) {
 
         return taskRepository
-                .findByAssigneeIdOrderByStatusAscPositionAsc(
-                        currentUser.getId()
-                )
+                .findActiveByAssigneeId(currentUser.getId(), activeDoneCutoff())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -82,8 +99,16 @@ public class TaskService {
                         HttpStatus.NOT_FOUND, "User not found"));
         authorizationService.requireStaffViewerAccess(currentUser, staffUser);
 
-        return taskRepository.findByAssigneeIdOrderByStatusAscPositionAsc(userId)
+        return taskRepository.findActiveByAssigneeId(userId, activeDoneCutoff())
                 .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TaskResponse> getTasksByDepartment(Long departmentId, User currentUser) {
+        authorizationService.requireDepartmentAccess(currentUser, departmentId);
+        return taskRepository.findActiveByEffectiveDepartmentId(departmentId, activeDoneCutoff()).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -91,15 +116,26 @@ public class TaskService {
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request, User currentUser) {
 
-        KanbanColumn column =
-                kanbanColumnRepository.findById(request.columnId())
-                        .orElseThrow(() ->
-                                new ResponseStatusException(
-                                        HttpStatus.NOT_FOUND,
-                                        "Column not found"
-                                )
-                        );
-        authorizationService.requireColumnAccess(currentUser, column);
+        boolean generalTask = request.columnId() == null;
+        KanbanColumn column = null;
+        Department taskDepartment;
+        if (generalTask) {
+            if (request.departmentId() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Department is required for a general task");
+            }
+            taskDepartment = departmentRepository.findById(request.departmentId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Department not found"));
+            authorizationService.requireGeneralTaskCreation(currentUser, taskDepartment);
+        } else {
+            column = kanbanColumnRepository.findById(request.columnId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Column not found"));
+            authorizationService.requireColumnAccess(currentUser, column);
+            taskDepartment = column.getBoard().getDepartment();
+        }
+
+        if (request.assigneeId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Assignee is required");
+        }
 
         User assignee = currentUser.getRole() == com.company.kanban.entity.Role.STAFF
                 ? currentUser
@@ -117,12 +153,13 @@ public class TaskService {
             authorizationService.requireAssignableUser(currentUser, assignee);
             authorizationService.requireAssigneeMatchesTaskDepartment(
                     assignee,
-                    column.getBoard().getDepartment()
+                    taskDepartment
             );
         }
 
-        int position =
-                taskRepository.countByColumnId(column.getId()) + 1;
+        int position = generalTask
+                ? taskRepository.countByColumnIsNullAndStatus(TaskStatus.DRAFT) + 1
+                : taskRepository.countByColumnId(column.getId()) + 1;
 
         Task task = new Task(
                 request.title(),
@@ -134,8 +171,9 @@ public class TaskService {
                 assignee
         );
         task.setCreatedBy(currentUser);
+        if (generalTask) task.setDepartment(taskDepartment);
         task.setWorkload(request.workload());
-        task.setStatus(statusFromColumn(column));
+        task.setStatus(generalTask ? TaskStatus.DRAFT : statusFromColumn(column));
 
         Task savedTask = taskRepository.save(task);
 
@@ -179,7 +217,7 @@ public class TaskService {
             authorizationService.requireAssignableUser(currentUser, assignee);
             authorizationService.requireAssigneeMatchesTaskDepartment(
                     assignee,
-                    task.getColumn().getBoard().getDepartment()
+                    task.getDepartment()
             );
         }
 
@@ -194,14 +232,6 @@ public class TaskService {
 
         if (!Objects.equals(oldAssignee == null ? null : oldAssignee.getId(), assignee == null ? null : assignee.getId())) {
             if (assignee != null) notificationService.notifyTaskReassigned(savedTask, oldAssignee, assignee, currentUser);
-        } else {
-            List<String> changes = new ArrayList<>();
-            if (!Objects.equals(oldTitle, request.title())) changes.add("Title");
-            if (!Objects.equals(oldDescription, request.description())) changes.add("Description");
-            if (!Objects.equals(oldPriority, request.priority())) changes.add("Priority");
-            if (!Objects.equals(oldDueDate, request.dueDate())) changes.add("Due date");
-            if (!Objects.equals(oldWorkload, request.workload())) changes.add("Workload");
-            if (!changes.isEmpty()) notificationService.notifyTaskUpdated(savedTask, currentUser, String.join(", ", changes));
         }
 
         return toResponse(savedTask);
@@ -223,6 +253,9 @@ public class TaskService {
         authorizationService.requireTaskOwnerMove(currentUser, task);
 
         KanbanColumn sourceColumn = task.getColumn();
+        if (sourceColumn == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "General tasks are moved by status in My Kanban");
+        }
 
         KanbanColumn targetColumn =
                 kanbanColumnRepository.findById(request.targetColumnId())
@@ -263,6 +296,7 @@ public class TaskService {
         TaskStatus previousStatus = task.getStatus();
         task.setColumn(targetColumn);
         task.setStatus(statusFromColumn(targetColumn));
+        updateCompletionTimestamp(task);
         if (task.getStatus() == TaskStatus.REVIEW) task.setSubmittedForReviewAt(java.time.LocalDateTime.now());
         else task.setSubmittedForReviewAt(null);
 
@@ -316,6 +350,9 @@ public class TaskService {
         );
 
         KanbanColumn sourceColumn = task.getColumn();
+        if (sourceColumn == null) {
+            return updateGeneralTaskStatus(task, request, currentUser);
+        }
         String targetColumnName = columnNameFromStatus(request.status());
         KanbanColumn targetColumn = kanbanColumnRepository
                 .findByBoardIdAndName(
@@ -338,6 +375,7 @@ public class TaskService {
         TaskStatus previousStatus = task.getStatus();
         task.setColumn(targetColumn);
         task.setStatus(request.status());
+        updateCompletionTimestamp(task);
         if (request.status() == TaskStatus.REVIEW) task.setSubmittedForReviewAt(java.time.LocalDateTime.now());
         if (request.status() != TaskStatus.REVIEW) task.setSubmittedForReviewAt(null);
         targetTasks.add(targetPosition - 1, task);
@@ -380,6 +418,23 @@ public class TaskService {
                 ? TaskStatus.DONE
                 : TaskStatus.DOING;
         KanbanColumn sourceColumn = task.getColumn();
+        if (sourceColumn == null) {
+            List<Task> targetTasks = new ArrayList<>(
+                    taskRepository.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(targetStatus, task.getId()));
+            List<Task> sourceTasks = new ArrayList<>(
+                    taskRepository.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(TaskStatus.REVIEW, task.getId()));
+            task.setStatus(targetStatus);
+            updateCompletionTimestamp(task);
+            task.setSubmittedForReviewAt(null);
+            task.setPosition(targetTasks.size() + 1);
+            targetTasks.add(task);
+            normalizePositions(targetTasks);
+            normalizePositions(sourceTasks);
+            taskRepository.saveAll(targetTasks);
+            taskRepository.saveAll(sourceTasks);
+            notificationService.notifyReviewResult(task, currentUser, request.action() == ReviewAction.APPROVE);
+            return toResponse(task);
+        }
         KanbanColumn targetColumn = kanbanColumnRepository
                 .findByBoardIdAndName(
                         sourceColumn.getBoard().getId(),
@@ -395,6 +450,7 @@ public class TaskService {
                         targetColumn.getId(), taskId);
         task.setColumn(targetColumn);
         task.setStatus(targetStatus);
+        updateCompletionTimestamp(task);
         if (request.action() == ReviewAction.RETURN) task.setSubmittedForReviewAt(null);
         targetTasks.add(task);
         normalizePositions(targetTasks);
@@ -414,12 +470,14 @@ public class TaskService {
     public List<ReviewQueueItem> reviewQueue(User currentUser) {
         authorizationService.requireWorkloadDashboardAccess(currentUser);
         return taskRepository.findByStatusOrderBySubmittedForReviewAtAsc(TaskStatus.REVIEW).stream()
-                .filter(task -> authorizationService.canAccessDepartment(currentUser, task.getColumn().getBoard().getDepartment().getId()))
+                .filter(task -> authorizationService.canAccessDepartment(currentUser, task.getDepartment().getId()))
                 .map(task -> new ReviewQueueItem(task.getId(), task.getTitle(), task.getDescription(), task.getWorkload(), task.getPriority(),
                         task.getDueDate(), task.getAssignee() == null ? null : task.getAssignee().getId(),
-                        task.getAssignee() == null ? null : task.getAssignee().getName(), task.getColumn().getBoard().getId(),
-                        task.getColumn().getBoard().getName(), task.getColumn().getBoard().getDepartment().getId(),
-                        task.getColumn().getBoard().getDepartment().getName(), task.getSubmittedForReviewAt(), task.getUpdatedAt()))
+                        task.getAssignee() == null ? null : task.getAssignee().getName(),
+                        task.isGeneralTask() ? null : task.getColumn().getBoard().getId(),
+                        task.isGeneralTask() ? "General Task" : task.getColumn().getBoard().getName(),
+                        task.getDepartment().getId(), task.getDepartment().getName(),
+                        task.getSubmittedForReviewAt(), task.getUpdatedAt()))
                 .toList();
     }
 
@@ -451,14 +509,15 @@ public class TaskService {
                 );
         authorizationService.requireTaskAccess(currentUser, task);
 
-        Long columnId = task.getColumn().getId();
+        Long columnId = task.getColumn() == null ? null : task.getColumn().getId();
 
         taskRepository.delete(task);
 
         taskRepository.flush();
 
-        List<Task> remainingTasks =
-                taskRepository.findByColumnIdOrderByPositionAsc(columnId);
+        if (columnId == null) return;
+
+        List<Task> remainingTasks = taskRepository.findByColumnIdOrderByPositionAsc(columnId);
 
         for (int i = 0; i < remainingTasks.size(); i++) {
             remainingTasks.get(i).setPosition(i + 1);
@@ -472,6 +531,7 @@ public class TaskService {
         User assignee = task.getAssignee();
         User createdBy = task.getCreatedBy();
         KanbanColumn column = task.getColumn();
+        Department department = task.getDepartment();
 
         return new TaskResponse(
                 task.getId(),
@@ -483,11 +543,11 @@ public class TaskService {
                 task.getDueDate(),
                 task.getPosition(),
 
-                column.getBoard().getId(),
-                column.getBoard().getName(),
+                column == null ? null : column.getBoard().getId(),
+                column == null ? "General Task" : column.getBoard().getName(),
 
-                column.getId(),
-                column.getName(),
+                column == null ? null : column.getId(),
+                column == null ? null : column.getName(),
 
                 assignee != null ? assignee.getId() : null,
                 assignee != null ? assignee.getName() : null,
@@ -496,8 +556,39 @@ public class TaskService {
                 createdBy != null ? createdBy.getName() : null,
 
                 task.getCreatedAt(),
-                task.getUpdatedAt()
+                task.getUpdatedAt(),
+                task.getCompletedAt(),
+
+                department == null ? null : department.getId(),
+                department == null ? null : department.getName(),
+                task.isGeneralTask()
         );
+    }
+
+    private TaskResponse updateGeneralTaskStatus(Task task, UpdateTaskStatusRequest request, User currentUser) {
+        TaskStatus previousStatus = task.getStatus();
+        List<Task> targetTasks = new ArrayList<>(
+                taskRepository.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(
+                        request.status(), task.getId()));
+        List<Task> sourceTasks = previousStatus == request.status() ? null : new ArrayList<>(
+                taskRepository.findByColumnIsNullAndStatusAndIdNotOrderByPositionAsc(
+                        previousStatus, task.getId()));
+        int targetPosition = Math.max(1, Math.min(request.targetPosition(), targetTasks.size() + 1));
+        task.setStatus(request.status());
+        updateCompletionTimestamp(task);
+        task.setSubmittedForReviewAt(request.status() == TaskStatus.REVIEW
+                ? java.time.LocalDateTime.now() : null);
+        targetTasks.add(targetPosition - 1, task);
+        normalizePositions(targetTasks);
+        taskRepository.saveAll(targetTasks);
+        if (sourceTasks != null) {
+            normalizePositions(sourceTasks);
+            taskRepository.saveAll(sourceTasks);
+        }
+        if (previousStatus != TaskStatus.REVIEW && request.status() == TaskStatus.REVIEW) {
+            notificationService.notifyReviewSubmitted(task, currentUser);
+        }
+        return toResponse(task);
     }
 
     private TaskStatus statusFromColumn(KanbanColumn column) {
@@ -522,9 +613,22 @@ public class TaskService {
         };
     }
 
+    private void updateCompletionTimestamp(Task task) {
+        if (task.getStatus() == TaskStatus.DONE && task.getCompletedAt() == null) {
+            task.setCompletedAt(java.time.LocalDateTime.now());
+        } else if (task.getStatus() != TaskStatus.DONE) {
+            task.setCompletedAt(null);
+        }
+    }
+
     private void normalizePositions(List<Task> tasks) {
         for (int i = 0; i < tasks.size(); i++) {
             tasks.get(i).setPosition(i + 1);
         }
+    }
+
+    private LocalDateTime activeDoneCutoff() {
+        return LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur"))
+                .minusDays(doneVisibleDays).atStartOfDay();
     }
 }

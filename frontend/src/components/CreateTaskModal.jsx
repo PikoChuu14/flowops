@@ -4,6 +4,8 @@ import { apiFetch } from "../api/apiFetch";
 const API_BASE_URL = "";
 
 const INITIAL_FORM = {
+  scope: "PROJECT",
+  projectId: "",
   title: "",
   description: "",
   priority: "MEDIUM",
@@ -12,20 +14,44 @@ const INITIAL_FORM = {
   workload: "3",
 };
 
-function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
+function CreateTaskModal({ isOpen, column, board, boards = [], departmentId, generalOnly = false, canChooseGeneral = false, users, user, onClose, onCreated }) {
   const [formData, setFormData] = useState(INITIAL_FORM);
+  const [projectColumns, setProjectColumns] = useState([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isOpen && user?.role === "STAFF") {
-      setFormData((current) => ({ ...current, assigneeId: String(user.userId) }));
+    if (isOpen) {
+      setFormData((current) => ({
+        ...current,
+        scope: generalOnly || (!boards.length && canChooseGeneral) ? "GENERAL" : "PROJECT",
+        projectId: String(board?.id ?? boards[0]?.id ?? ""),
+        assigneeId: user?.role === "STAFF" ? String(user.userId) : "",
+      }));
     }
-  }, [isOpen, user]);
+  }, [generalOnly, isOpen, user, board, boards, canChooseGeneral]);
 
-  if (!isOpen || !column) {
+  useEffect(() => {
+    if (!isOpen || generalOnly || !formData.projectId) return;
+    let cancelled = false;
+    apiFetch(`${API_BASE_URL}/api/columns/board/${formData.projectId}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((data) => { if (!cancelled) setProjectColumns(data); })
+      .catch(() => { if (!cancelled) setProjectColumns([]); });
+    return () => { cancelled = true; };
+  }, [formData.projectId, generalOnly, isOpen]);
+
+  if (!isOpen || (!generalOnly && !column && !boards.length && !canChooseGeneral)) {
     return null;
   }
+
+  const isGeneral = generalOnly || formData.scope === "GENERAL";
+  const generalDepartmentId = departmentId ?? board?.departmentId ?? user?.departmentId;
+  const selectedBoard = boards.find((candidate) => candidate.id === Number(formData.projectId)) ?? board;
+  const selectedColumn = column ?? projectColumns.find((candidate) => candidate.name.toLowerCase() === "to do");
+  const eligibleUsers = isGeneral
+    ? users.filter((candidate) => candidate.departmentId === generalDepartmentId)
+    : users;
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -48,6 +74,16 @@ function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
       return;
     }
 
+    if (!formData.assigneeId) {
+      setError("An assignee is required.");
+      return;
+    }
+
+    if (!isGeneral && !selectedColumn) {
+      setError("The selected project does not have a To Do column.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -58,10 +94,9 @@ function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
           description: formData.description.trim() || null,
           priority: formData.priority,
           dueDate: formData.dueDate || null,
-          columnId: Number(column.id),
-          assigneeId: formData.assigneeId
-            ? Number(formData.assigneeId)
-            : null,
+          columnId: isGeneral ? null : selectedColumn?.id,
+          departmentId: isGeneral ? Number(generalDepartmentId) : null,
+          assigneeId: Number(formData.assigneeId),
           workload: Number(formData.workload),
         }),
       });
@@ -79,7 +114,8 @@ function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
         throw new Error(message);
       }
 
-      await onCreated();
+      const createdTask = await response.json();
+      await onCreated(createdTask);
       setFormData(INITIAL_FORM);
       onClose();
     } catch (submitError) {
@@ -112,7 +148,7 @@ function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
         <div className="modal-header">
           <div>
             <h2 id="create-task-title">Create Task</h2>
-            <p>Adding to {column.name}</p>
+            <p>{isGeneral ? "PPC · General Task" : `Adding to ${selectedBoard?.name ?? "Project"} · To Do`}</p>
           </div>
           <button
             type="button"
@@ -126,6 +162,24 @@ function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
         </div>
 
         <form className="create-task-form" onSubmit={handleSubmit}>
+          {canChooseGeneral && !generalOnly && (
+            <fieldset className="task-scope-fieldset">
+              <legend>Task Scope</legend>
+              <label><input type="radio" name="scope" value="PROJECT" checked={formData.scope === "PROJECT"} onChange={handleChange} /> Project task</label>
+              <label><input type="radio" name="scope" value="GENERAL" checked={formData.scope === "GENERAL"} onChange={handleChange} /> General task</label>
+            </fieldset>
+          )}
+
+          {!isGeneral && (
+            <>
+              <label htmlFor="task-project">Project</label>
+              <select id="task-project" name="projectId" value={formData.projectId} onChange={handleChange} required>
+                <option value="">Select a project</option>
+                {boards.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </>
+          )}
+
           <label htmlFor="task-title">
             Title <span className="required-marker">*</span>
           </label>
@@ -191,15 +245,15 @@ function CreateTaskModal({ isOpen, column, users, user, onClose, onCreated }) {
             <option value="5">5 — Very Large</option>
           </select>
 
-          <label htmlFor="task-assignee">Assignee</label>
+          <label htmlFor="task-assignee">Assignee <span className="required-marker">*</span></label>
           <select
             id="task-assignee"
             name="assigneeId"
             value={formData.assigneeId}
             onChange={handleChange}
           >
-            {user?.role !== "STAFF" && <option value="">Unassigned</option>}
-            {users.map((user) => (
+            {user?.role !== "STAFF" && <option value="">Select an assignee</option>}
+            {eligibleUsers.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name || user.email}
               </option>

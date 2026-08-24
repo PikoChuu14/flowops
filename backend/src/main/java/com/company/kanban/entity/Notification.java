@@ -30,6 +30,10 @@ public class Notification {
     private Long taskId;
     private Long boardId;
     private Long dailyReportId;
+    private Long rawMaterialArrivalId;
+
+    @Column(length = 500)
+    private String destination;
 
     @Column(name = "is_read", nullable = false)
     private boolean read;
@@ -51,6 +55,10 @@ public class Notification {
         this.boardId = boardId;
         this.dailyReportId = dailyReportId;
     }
+    public Notification(User recipient, NotificationType type, String title, String message,
+                        Long taskId, Long boardId, Long dailyReportId, Long rawMaterialArrivalId) {
+        this(recipient, type, title, message, taskId, boardId, dailyReportId); this.rawMaterialArrivalId = rawMaterialArrivalId;
+    }
 
     @PrePersist
     void onCreate() {
@@ -65,6 +73,9 @@ public class Notification {
     public Long getTaskId() { return taskId; }
     public Long getBoardId() { return boardId; }
     public Long getDailyReportId() { return dailyReportId; }
+    public Long getRawMaterialArrivalId() { return rawMaterialArrivalId; }
+    public String getDestination() { return destination; }
+    public void setDestination(String destination) { this.destination = destination; }
     public boolean isRead() { return read; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getClearedAt() { return clearedAt; }

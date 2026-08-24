@@ -7,6 +7,8 @@ export const STATUS_LABELS = {
   DONE: "Done",
 };
 
+export const ACTIVE_STATUSES = new Set(["DRAFT", "DOING", "REVIEW"]);
+
 export function malaysiaToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur" }).format(new Date());
 }
@@ -18,7 +20,7 @@ export function timeGreeting(name) {
 }
 
 export function taskIsActive(task) {
-  return task.status !== "DONE";
+  return ACTIVE_STATUSES.has(task.status);
 }
 
 export function taskNeedsAttention(task) {

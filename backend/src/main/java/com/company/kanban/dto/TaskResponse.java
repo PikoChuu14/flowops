@@ -30,7 +30,12 @@ public record TaskResponse(
         String createdByName,
 
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDateTime completedAt,
+
+        Long departmentId,
+        String departmentName,
+        boolean generalTask
 
 ) {
 }

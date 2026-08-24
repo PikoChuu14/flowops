@@ -10,6 +10,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 import java.util.Set;
@@ -34,9 +36,21 @@ public class DataInitializer {
     CommandLineRunner initializeData(
             DepartmentRepository departmentRepository,
             BoardRepository boardRepository,
-            KanbanColumnRepository kanbanColumnRepository) {
+            KanbanColumnRepository kanbanColumnRepository,
+            JdbcTemplate jdbcTemplate,
+            Environment environment) {
 
         return args -> {
+
+            // Existing installations were created with column_id NOT NULL before
+            // general tasks were introduced. Hibernate's update mode does not
+            // reliably relax that constraint, so make the additive migration
+            // explicit before the first general-task insert.
+            if (!List.of(environment.getActiveProfiles()).contains("test")) {
+                jdbcTemplate.execute("ALTER TABLE IF EXISTS tasks ALTER COLUMN column_id DROP NOT NULL");
+                jdbcTemplate.execute("ALTER TABLE IF EXISTS task_snapshots ALTER COLUMN board_id DROP NOT NULL");
+                jdbcTemplate.execute("ALTER TABLE IF EXISTS task_snapshots ALTER COLUMN board_name DROP NOT NULL");
+            }
 
             String[] departments = {
                 "PPC",

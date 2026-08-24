@@ -13,4 +13,5 @@ public interface SnapshotBatchRepository extends JpaRepository<SnapshotBatch, Lo
     Optional<SnapshotBatch> findBySnapshotDateAndSnapshotType(LocalDate date, SnapshotType type);
     List<SnapshotBatch> findByStatusOrderBySnapshotDateDesc(SnapshotBatchStatus status);
     List<SnapshotBatch> findAllByOrderBySnapshotDateDescSnapshotTypeAsc();
+    List<SnapshotBatch> findBySnapshotDateBetweenAndStatusOrderBySnapshotDateAsc(LocalDate start, LocalDate end, SnapshotBatchStatus status);
 }

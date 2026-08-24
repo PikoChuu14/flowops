@@ -19,6 +19,24 @@ public class AuthorizationService {
         return user != null && user.getRole() == Role.ADMIN;
     }
 
+    public void requirePpcPlanningAccess(User user) {
+        if (isAdmin(user)) return;
+        if (user == null || user.getDepartment() == null
+                || !"PPC".equalsIgnoreCase(user.getDepartment().getName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "PPC Planning is available only to PPC users and administrators");
+        }
+    }
+
+    public void requirePpcRawMaterialArrivalAccess(User user) {
+        if (isAdmin(user)) return;
+        if (user == null || user.getDepartment() == null
+                || !"PPC".equalsIgnoreCase(user.getDepartment().getName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Raw material arrivals are available only to PPC users and administrators");
+        }
+    }
+
     public boolean canAccessDepartment(User user, Long departmentId) {
         return isAdmin(user)
                 || user != null
@@ -52,7 +70,11 @@ public class AuthorizationService {
     }
 
     public void requireTaskAccess(User user, Task task) {
-        requireColumnAccess(user, task.getColumn());
+        Department department = task.getDepartment();
+        if (department == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task has no department");
+        }
+        requireDepartmentAccess(user, department.getId());
     }
 
     public void requireTaskOwnerMove(User user, Task task) {
@@ -78,6 +100,7 @@ public class AuthorizationService {
         requirePersonalTaskAccess(user, task);
 
         if (user.getRole() == Role.STAFF
+                && !task.isGeneralTask()
                 && targetStatus == com.company.kanban.entity.TaskStatus.DONE) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -165,7 +188,22 @@ public class AuthorizationService {
             );
         }
 
-        requireAssigneeMatchesTaskDepartment(assignee, task.getColumn().getBoard().getDepartment());
+        requireAssigneeMatchesTaskDepartment(assignee, task.getDepartment());
+    }
+
+    public void requireGeneralTaskCreation(User currentUser, Department department) {
+        if (department == null || !"PPC".equalsIgnoreCase(department.getName())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "General task creation is currently available only for PPC"
+            );
+        }
+        if (!isAdmin(currentUser)) {
+            if (currentUser == null || currentUser.getDepartment() == null
+                    || !Objects.equals(currentUser.getDepartment().getId(), department.getId())) {
+                throw forbidden();
+            }
+        }
     }
 
     public void requireAssigneeMatchesTaskDepartment(

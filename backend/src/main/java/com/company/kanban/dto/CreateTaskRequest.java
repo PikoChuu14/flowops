@@ -20,9 +20,11 @@ public record CreateTaskRequest(
 
         LocalDate dueDate,
 
-        @NotNull
         Long columnId,
 
+        Long departmentId,
+
+        @NotNull(message = "assigneeId is required")
         Long assigneeId,
 
         @NotNull

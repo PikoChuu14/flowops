@@ -16,15 +16,22 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
+import java.time.LocalDate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
+import com.company.kanban.service.CompletedTaskService;
 
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
 
     private final TaskService taskService;
+    private final CompletedTaskService completedTaskService;
 
-    public TaskController(TaskService taskService) {
+    public TaskController(TaskService taskService, CompletedTaskService completedTaskService) {
         this.taskService = taskService;
+        this.completedTaskService = completedTaskService;
     }
 
     @GetMapping("/column/{columnId}")
@@ -53,6 +60,21 @@ public class TaskController {
             @AuthenticationPrincipal User currentUser) {
 
         return taskService.getTasksByUser(userId, currentUser);
+    }
+
+    @GetMapping("/completed")
+    public Page<TaskResponse> completed(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Pageable pageable, @AuthenticationPrincipal User currentUser) {
+        return completedTaskService.find(from, to, currentUser, pageable);
+    }
+
+    @GetMapping("/department/{departmentId}")
+    public List<TaskResponse> getTasksByDepartment(
+            @PathVariable Long departmentId,
+            @AuthenticationPrincipal User currentUser) {
+        return taskService.getTasksByDepartment(departmentId, currentUser);
     }
 
     @PostMapping

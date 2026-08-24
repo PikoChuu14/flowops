@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $installer = Join-Path $root 'installer'
+$version = (Get-Content -Raw -LiteralPath (Join-Path $root 'VERSION.txt')).Trim()
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid FlowOps version: $version" }
 
 function Find-Tool([string]$Name, [string[]]$Fallbacks) {
   $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -15,7 +17,18 @@ $iscc = Find-Tool 'ISCC.exe' @(
 )
 if (-not $iscc) { throw 'Inno Setup compiler ISCC.exe was not found. Install Inno Setup 6, then rerun this script.' }
 
-& $iscc (Join-Path $installer 'FlowOps-Client.iss')
+$localDotnet = Join-Path $root '.tools\dotnet\dotnet.exe'
+$dotnet = if (Test-Path -LiteralPath $localDotnet) { $localDotnet } else { Find-Tool 'dotnet.exe' @() }
+if (-not $dotnet) { throw 'A .NET 8 SDK was not found. Install the SDK or place it under .tools\dotnet, then rerun this script.' }
+$dotnetWorkspace = Join-Path $root '.tools'
+New-Item -ItemType Directory -Force -Path $dotnetWorkspace | Out-Null
+$env:DOTNET_CLI_HOME = $dotnetWorkspace
+$env:NUGET_PACKAGES = Join-Path $dotnetWorkspace 'nuget'
+$env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+& (Join-Path $PSScriptRoot 'publish-agent.ps1') -DotNet $dotnet -Version $version
+
+& $iscc "/DAppVersion=$version" (Join-Path $installer 'FlowOps-Client.iss')
 if ($LASTEXITCODE -ne 0) { throw 'FlowOps Client installer compilation failed.' }
 
 $output = Join-Path $root 'dist\installer\FlowOps-Client-Setup.exe'

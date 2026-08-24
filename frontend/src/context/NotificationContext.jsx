@@ -129,27 +129,44 @@ export function NotificationProvider({ children }) {
     readOverrides.current.add(id);
     if (unreadIds.current.delete(id)) setUnreadCount((count) => Math.max(0, count - 1));
     setNotifications((items) => items.map((item) => item.id === id ? { ...item, read: true } : item));
-    const response = await apiFetch(`${API_BASE_URL}/api/notifications/${id}/read`, { method: "PATCH" });
-    if (!response.ok) {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/notifications/${id}/read`, { method: "PATCH" });
+      if (!response.ok) throw new Error(`Mark notification as read failed (${response.status}).`);
+      const persisted = await response.json();
+      readOverrides.current.delete(id);
+      setNotifications((items) => items.map((item) => item.id === id ? persisted : item));
+      await fetchUnreadCount();
+      return true;
+    } catch (error) {
       readOverrides.current.delete(id);
       await fetchNotifications();
-      return false;
+      throw error;
     }
-    const persisted = await response.json();
-    setNotifications((items) => items.map((item) => item.id === id ? persisted : item));
-    await fetchUnreadCount();
-    return true;
   }, [fetchNotifications, fetchUnreadCount]);
 
   const markAllRead = useCallback(async () => {
     beginMutation();
-    readOverrides.current.clear();
+    // Keep the optimistic decision for every currently visible item while the
+    // PATCH is in flight. A refresh started after this mutation can otherwise
+    // briefly restore the old unread values from the server.
+    setNotifications((items) => {
+      items.forEach((item) => readOverrides.current.add(item.id));
+      return items.map((item) => ({ ...item, read: true }));
+    });
     unreadIds.current.clear();
     setUnreadCount(0);
-    setNotifications((items) => items.map((item) => ({ ...item, read: true })));
-    const response = await apiFetch(`${API_BASE_URL}/api/notifications/read-all`, { method: "PATCH" });
-    if (!response.ok) fetchNotifications();
-  }, [fetchNotifications]);
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/notifications/read-all`, { method: "PATCH" });
+      if (!response.ok) throw new Error(`Mark all notifications as read failed (${response.status}).`);
+      await fetchNotifications();
+      await fetchUnreadCount();
+      return true;
+    } catch (error) {
+      readOverrides.current.clear();
+      await fetchNotifications();
+      throw error;
+    }
+  }, [fetchNotifications, fetchUnreadCount]);
 
   const clearNotification = useCallback(async (id) => {
     beginMutation();

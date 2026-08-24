@@ -23,9 +23,14 @@ function NotificationBell({ onNavigate }) {
   }
 
   async function openNotification(notification) {
-    if (!notification.read) await markRead(notification.id);
-    setOpen(false);
-    onNavigate(notification);
+    try {
+      if (!notification.read) await markRead(notification.id);
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    } finally {
+      setOpen(false);
+      onNavigate(notification);
+    }
   }
 
   return (

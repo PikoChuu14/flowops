@@ -97,9 +97,7 @@ function StaffKanban({ staffUser, refreshKey, onTaskSelected, onTaskChanged, onR
                       }}
                     >
                       <h3>{task.title}</h3>
-                      {task.boardName && (
-                        <small className="task-board-name">{task.boardName}</small>
-                      )}
+                      <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
                       <p>{task.description}</p>
                       <div className="task-meta">
                         <span>{task.priority} · Workload {task.workload ?? "—"}</span>

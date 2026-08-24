@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api/apiFetch";
+import CreateTaskModal from "../components/CreateTaskModal";
 
 const API_BASE_URL = "";
 const DRAG_START_THRESHOLD = 6;
@@ -11,15 +12,18 @@ const STATUSES = [
   { value: "DONE", label: "Done" },
 ];
 
-function PersonalKanban({ user }) {
+function PersonalKanban({ user, users = [], departments = [] }) {
   const [tasks, setTasks] = useState([]);
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [dropIndicator, setDropIndicator] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
+  const [showCreateGeneral, setShowCreateGeneral] = useState(false);
   const tasksRef = useRef(tasks);
   const pointerDownRef = useRef(null);
   const draggedTaskRef = useRef(null);
   const dropIndicatorRef = useRef(null);
+  const ppcDepartment = departments.find((department) => department.name?.toUpperCase() === "PPC");
+  const canCreateGeneral = user?.role === "ADMIN" || user?.departmentName?.toUpperCase() === "PPC";
 
   async function loadMyTasks() {
     try {
@@ -68,7 +72,7 @@ function PersonalKanban({ user }) {
       }
 
       const rect = taskElement.getBoundingClientRect();
-      if (user?.role === "STAFF" && taskElement.dataset.personalStatus === "DONE") {
+      if (user?.role === "STAFF" && !task.generalTask && taskElement.dataset.personalStatus === "DONE") {
         return null;
       }
       return {
@@ -81,6 +85,7 @@ function PersonalKanban({ user }) {
     const columnElement = element?.closest("[data-personal-status]");
     if (
       user?.role === "STAFF" &&
+      !task.generalTask &&
       columnElement?.dataset.personalStatus === "DONE"
     ) {
       return null;
@@ -208,7 +213,12 @@ function PersonalKanban({ user }) {
 
   return (
     <>
-      <h1>My Work</h1>
+      <div className="personal-kanban-heading">
+        <h1>My Work</h1>
+        {canCreateGeneral && ppcDepartment && (
+          <button type="button" className="primary-button" onClick={() => setShowCreateGeneral(true)}>+ General Task</button>
+        )}
+      </div>
 
       <div className="kanban-board personal-kanban">
         {STATUSES.map((status) => {
@@ -244,9 +254,7 @@ function PersonalKanban({ user }) {
                       onPointerDown={(event) => handlePointerDown(event, task)}
                     >
                       <h3>{task.title}</h3>
-                      {task.boardName && (
-                        <small className="task-board-name">{task.boardName}</small>
-                      )}
+                      <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
                       <p>{task.description}</p>
                       <div className="task-meta">
                         <span>{task.priority} · Workload {task.workload ?? "—"}</span>
@@ -286,9 +294,7 @@ function PersonalKanban({ user }) {
         >
           <div className="task-card drag-preview-card">
             <h3>{dragPreview.task.title}</h3>
-            {dragPreview.task.boardName && (
-              <small className="task-board-name">{dragPreview.task.boardName}</small>
-            )}
+            <small className="task-board-name">{dragPreview.task.generalTask ? "GENERAL · PPC" : dragPreview.task.boardName}</small>
             <p>{dragPreview.task.description}</p>
             <div className="task-meta">
               <span>
@@ -299,6 +305,16 @@ function PersonalKanban({ user }) {
           </div>
         </div>
       )}
+
+      <CreateTaskModal
+        isOpen={showCreateGeneral}
+        generalOnly
+        departmentId={ppcDepartment?.id}
+        users={users}
+        user={user}
+        onClose={() => setShowCreateGeneral(false)}
+        onCreated={loadMyTasks}
+      />
     </>
   );
 }

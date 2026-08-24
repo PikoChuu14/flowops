@@ -1,5 +1,18 @@
 # FlowOps installer
 
+## Lightweight client and notification agent
+
+Before compiling `FlowOps-Client.iss`, publish the self-contained Windows agent:
+
+```powershell
+.\scripts\publish-agent.ps1
+& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\FlowOps-Client.iss
+```
+
+The client package remains per-user and installs no Java, PostgreSQL, backend, service, or system-wide .NET runtime. Its default-checked auto-start option uses the current user's HKCU Run key. Upgrades preserve the server URL, DPAPI-encrypted credential, cursor, logs, and previous task selections. Uninstall removes binaries and the Run entry but deliberately leaves per-user data and the backend device registration intact; revoke the device in FlowOps first if access should end.
+
+Use trusted HTTPS in production. HTTP remains available for development/LAN testing but does not encrypt credentials or notification content in transit.
+
 This installer uses Inno Setup and WinSW. The repository intentionally does not include third-party binaries.
 
 Before compiling, place these files in `installer\prerequisites\`:

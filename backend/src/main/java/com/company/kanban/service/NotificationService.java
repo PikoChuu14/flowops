@@ -83,15 +83,13 @@ public class NotificationService {
     }
 
     public void notifyTaskReassigned(Task task, User oldAssignee, User newAssignee, User actor) {
-        if (oldAssignee != null && !oldAssignee.getId().equals(newAssignee.getId()))
-            notifyUser(oldAssignee, actor, NotificationType.TASK_REASSIGNED, "Task reassigned",
-                    "\"" + task.getTitle() + "\" was reassigned from you to " + newAssignee.getName() + " by " + actor.getName() + ".", task, null);
-        notifyUser(newAssignee, actor, NotificationType.TASK_ASSIGNED, "Task assigned",
-                actor.getName() + " assigned \"" + task.getTitle() + "\" to you.", task, null);
+        if (newAssignee != null && (oldAssignee == null || !oldAssignee.getId().equals(newAssignee.getId())))
+            notifyUser(newAssignee, actor, NotificationType.TASK_REASSIGNED, "Task reassigned to you",
+                    "\"" + task.getTitle() + "\" has been reassigned to you.", task, null);
     }
 
     public void notifyReviewSubmitted(Task task, User actor) {
-        userRepository.findByDepartmentIdAndRole(task.getColumn().getBoard().getDepartment().getId(), Role.MANAGER)
+        userRepository.findByDepartmentIdAndRole(task.getDepartment().getId(), Role.MANAGER)
                 .forEach(manager -> notifyUser(manager, actor, NotificationType.TASK_REVIEW_SUBMITTED, "Review requested",
                         actor.getName() + " submitted \"" + task.getTitle() + "\" for review.", task, null));
     }
@@ -125,10 +123,12 @@ public class NotificationService {
 
     private void notifyUser(User recipient, User actor, NotificationType type, String title, String message,
                             Task task, Long boardId, Long dailyReportId) {
-        if (recipient == null || actor == null || recipient.getId().equals(actor.getId())) return;
-        notificationRepository.save(new Notification(recipient, type, title, message,
+        if (recipient == null || actor == null || recipient.getStatus() != AccountStatus.ACTIVE || recipient.getId().equals(actor.getId())) return;
+        Notification notification = new Notification(recipient, type, title, message,
                 task == null ? null : task.getId(),
-                task == null ? boardId : task.getColumn().getBoard().getId(), dailyReportId));
+                task == null ? boardId : task.isGeneralTask() ? null : task.getColumn().getBoard().getId(), dailyReportId);
+        notification.setDestination(destination(type, notification.getTaskId(), notification.getBoardId(), dailyReportId, null));
+        notificationRepository.save(notification);
     }
 
     private Notification owned(Long id, User currentUser) {
@@ -138,6 +138,25 @@ public class NotificationService {
 
     private NotificationResponse toResponse(Notification n) {
         return new NotificationResponse(n.getId(), n.getType(), n.getTitle(), n.getMessage(), n.isRead(),
-                n.getCreatedAt(), n.getTaskId(), n.getBoardId(), n.getDailyReportId());
+                n.getCreatedAt(), n.getTaskId(), n.getBoardId(), n.getDailyReportId(), n.getRawMaterialArrivalId(),
+                n.getDestination() == null ? destination(n.getType(), n.getTaskId(), n.getBoardId(), n.getDailyReportId(), n.getRawMaterialArrivalId()) : n.getDestination());
+    }
+
+    public void notifyScheduled(User recipient, NotificationType type, String title, String message,
+                                Long taskId, Long boardId, String destination) {
+        if (recipient == null || recipient.getStatus() != AccountStatus.ACTIVE) return;
+        Notification notification = new Notification(recipient, type, title, message, taskId, boardId, null);
+        notification.setDestination(destination == null ? destination(type, taskId, boardId, null, null) : destination);
+        notificationRepository.save(notification);
+    }
+
+    public static String destination(NotificationType type, Long taskId, Long boardId, Long dailyReportId, Long arrivalId) {
+        if (arrivalId != null) return "/ppc/raw-material-arrivals?arrivalId=" + arrivalId;
+        if (type == NotificationType.TASK_REVIEW_SUBMITTED) return taskId == null ? "/reviews" : "/reviews?taskId=" + taskId;
+        if (type == NotificationType.DAILY_REPORT_SUBMITTED) return dailyReportId == null ? "/reports/monthly" : "/reports/monthly?dailyReportId=" + dailyReportId;
+        if (type == NotificationType.MONTHLY_REPORT_3_DAY_REMINDER || type == NotificationType.MONTHLY_REPORT_MONTH_END || type == NotificationType.MONTHLY_REPORT_OVERDUE)
+            return "/reports/monthly";
+        if (boardId != null) return "/projects?boardId=" + boardId + (taskId == null ? "" : "&taskId=" + taskId);
+        return taskId == null ? "/" : "/?taskId=" + taskId;
     }
 }

@@ -34,8 +34,14 @@ public class Task {
     private Integer position;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "column_id", nullable = false)
+    @JoinColumn(name = "column_id")
     private KanbanColumn column;
+
+    // Set only for general tasks. Project tasks continue to derive their
+    // authoritative department from column -> board -> department.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assignee_id")
@@ -52,6 +58,9 @@ public class Task {
     private LocalDateTime updatedAt;
 
     private LocalDateTime submittedForReviewAt;
+
+    /** Reliable completion event timestamp; null for legacy tasks completed before this field existed. */
+    private LocalDateTime completedAt;
 
     public Task() {
     }
@@ -125,6 +134,17 @@ public class Task {
         return column;
     }
 
+    public Department getDepartment() {
+        if (department != null) {
+            return department;
+        }
+        return column == null ? null : column.getBoard().getDepartment();
+    }
+
+    public boolean isGeneralTask() {
+        return column == null;
+    }
+
     public User getAssignee() {
         return assignee;
     }
@@ -139,6 +159,8 @@ public class Task {
 
     public LocalDateTime getSubmittedForReviewAt() { return submittedForReviewAt; }
     public void setSubmittedForReviewAt(LocalDateTime value) { this.submittedForReviewAt = value; }
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime value) { this.completedAt = value; }
 
     public void setTitle(String title) {
         this.title = title;
@@ -164,6 +186,10 @@ public class Task {
         this.column = column;
     }
 
+    public void setDepartment(Department department) {
+        this.department = department;
+    }
+
     public void setAssignee(User assignee) {
         this.assignee = assignee;
     }
@@ -179,4 +205,6 @@ public class Task {
     public void setCreatedBy(User createdBy) {
         this.createdBy = createdBy;
     }
+
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

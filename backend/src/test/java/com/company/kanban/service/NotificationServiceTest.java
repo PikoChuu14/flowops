@@ -65,6 +65,21 @@ class NotificationServiceTest {
         verify(notifications).saveAndFlush(notification);
     }
 
+    @Test
+    void generalTaskNotificationKeepsTaskLinkWithoutFakeBoard() {
+        Department department = entity(new Department("PPC"), 1L);
+        User actor = entity(new User("Manager", "manager@test", "x", Role.MANAGER, department), 2L);
+        User assignee = entity(new User("Staff", "staff@test", "x", Role.STAFF, department), 3L);
+        Task task = new Task("Supplier follow-up", "", Priority.MEDIUM, null, 1, null, assignee);
+        task.setDepartment(department);
+        ReflectionTestUtils.setField(task, "id", 6L);
+
+        service.notifyTaskAssigned(task, actor);
+
+        verify(notifications).save(argThat(notification -> notification.getTaskId().equals(6L)
+                && notification.getBoardId() == null));
+    }
+
     private static <T> T entity(T value, Long id) {
         ReflectionTestUtils.setField(value, "id", id);
         return value;

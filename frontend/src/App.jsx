@@ -18,15 +18,36 @@ import HistoryPage from "./pages/HistoryPage";
 import ReassignTaskModal from "./components/ReassignTaskModal";
 import DailyReportPage from "./pages/DailyReportPage";
 import TeamDailyReportsPage from "./pages/TeamDailyReportsPage";
+import MonthlyReportsPage from "./pages/MonthlyReportsPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import ClientAccessPage from "./pages/ClientAccessPage";
 import ActivationPage from "./pages/ActivationPage";
+import PpcPlanningPage from "./pages/PpcPlanningPage";
+import RawMaterialArrivalsPage from "./pages/RawMaterialArrivalsPage";
+import DesktopNotificationsPage from "./pages/DesktopNotificationsPage";
+import CompletedTasksPage from "./pages/CompletedTasksPage";
 import { apiFetch } from "./api/apiFetch";
 import { useAuth } from "./context/AuthContext";
 
 const API_BASE_URL = "";
 const DRAG_START_THRESHOLD = 6;
+
+function viewForLocation() {
+  const path = window.location.pathname;
+  const hasTaskTarget = path === "/" && new URLSearchParams(window.location.search).has("taskId");
+  if (path === "/settings/desktop-notifications") return "desktop-notifications";
+  if (path === "/completed") return "completed";
+  if (path === "/ppc/planning") return "ppc-planning";
+  if (path === "/ppc/raw-material-arrivals") return "ppc-arrivals";
+  if (path === "/reviews") return "reviews";
+  if (path === "/projects") return "project";
+  if (path.startsWith("/reports")) return "report";
+  if (path === "/admin/users") return "users-admin";
+  if (path === "/admin/settings/data-management") return "data-management";
+  if (path === "/admin/settings/client-access") return "client-access";
+  return hasTaskTarget ? "personal" : "dashboard";
+}
 
 function TaskCardContent({ task }) {
   return (
@@ -35,7 +56,7 @@ function TaskCardContent({ task }) {
 
       <p>{task.description}</p>
 
-      {task.boardName && <small className="task-board-name">{task.boardName}</small>}
+      <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
 
       <div className="task-meta">
         <span>{task.priority} · Workload {task.workload ?? "—"}</span>
@@ -56,7 +77,7 @@ function App() {
   const isManager = user?.role === "MANAGER";
   const canManageBoards = isAdmin || isManager;
   const canDeleteTask = isAdmin || isManager;
-  const initialView = window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard";
+  const initialView = viewForLocation();
   const [activeView, setActiveView] = useState(initialView);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [staffRefreshKey, setStaffRefreshKey] = useState(0);
@@ -66,6 +87,7 @@ function App() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState(null);
   const [boards, setBoards] = useState([]);
   const [selectedBoardId, setSelectedBoardId] = useState(null);
+  const routeBoardId = Number(new URLSearchParams(window.location.search).get("boardId")) || null;
   const [showCreateBoard, setShowCreateBoard] = useState(false);
   const [boardToEdit, setBoardToEdit] = useState(null);
   const [boardToDelete, setBoardToDelete] = useState(null);
@@ -74,8 +96,10 @@ function App() {
 
   const [columns, setColumns] = useState([]);
   const [tasksByColumn, setTasksByColumn] = useState({});
+  const [generalTasks, setGeneralTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedColumn, setSelectedColumn] = useState(null);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToReassign, setTaskToReassign] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
@@ -92,6 +116,8 @@ function App() {
   const selectedStaff = users.find(
     (candidate) => candidate.id === Number(selectedStaffId)
   ) ?? null;
+  const selectedDepartment = departments.find((department) => department.id === selectedDepartmentId);
+  const canShowGeneralBoard = selectedDepartment?.name?.toUpperCase() === "PPC";
 
   const loadBoard = useCallback(async (boardId) => {
     try {
@@ -133,6 +159,18 @@ function App() {
     }
   }, []);
 
+  const loadGeneralTasks = useCallback(async (departmentId) => {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/tasks/department/${departmentId}`);
+      if (!response.ok) throw new Error(`General tasks request failed (${response.status}).`);
+      const data = await response.json();
+      setGeneralTasks(data.filter((task) => task.generalTask));
+    } catch (error) {
+      console.error("Failed to load general tasks:", error);
+      setGeneralTasks([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated || !user) {
       return;
@@ -141,7 +179,7 @@ function App() {
     // Permission errors are handled silently in the workspace. Clear any
     // stale message when switching accounts or roles.
     setPermissionMessage("");
-    setActiveView(window.location.pathname === "/admin/users" ? "users-admin" : window.location.pathname === "/admin/settings/data-management" ? "data-management" : window.location.pathname === "/admin/settings/client-access" ? "client-access" : "dashboard");
+    setActiveView(viewForLocation());
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -212,29 +250,36 @@ function App() {
         setColumns([]);
         setTasksByColumn({});
       }
+      if (data.length === 0 && departments.find((department) => department.id === departmentId)?.name?.toUpperCase() === "PPC") {
+        setSelectedBoardId("general");
+      }
     } catch (error) {
       console.error("Failed to load boards:", error);
     }
-  }, []);
+  }, [departments]);
 
   useEffect(() => {
     if (selectedDepartmentId !== null) {
-      loadBoards(selectedDepartmentId);
+      loadBoards(selectedDepartmentId, activeView === "project" ? routeBoardId : null);
     }
-  }, [selectedDepartmentId, loadBoards]);
+  }, [activeView, selectedDepartmentId, loadBoards, routeBoardId]);
 
   useEffect(() => {
-    if (selectedBoardId !== null) {
+    if (selectedBoardId === "general") {
+      loadGeneralTasks(selectedDepartmentId);
+      setColumns([]);
+      setTasksByColumn({});
+    } else if (selectedBoardId !== null) {
       loadBoard(selectedBoardId);
       return;
     }
 
     setColumns([]);
     setTasksByColumn({});
-  }, [activeView, selectedBoardId, loadBoard]);
+  }, [activeView, selectedBoardId, selectedDepartmentId, loadBoard, loadGeneralTasks]);
 
   useEffect(() => {
-    if (!isAuthenticated || selectedBoardId === null || !["project", "staff"].includes(activeView)) return undefined;
+    if (!isAuthenticated || selectedBoardId === null || selectedBoardId === "general" || !["project", "staff"].includes(activeView)) return undefined;
     const refresh = () => { if (document.visibilityState === "visible") loadBoard(selectedBoardId); };
     const interval = window.setInterval(refresh, 20000);
     window.addEventListener("focus", refresh);
@@ -516,10 +561,12 @@ function App() {
 
   function openCreateTaskModal(column) {
     setSelectedColumn(column);
+    setShowCreateTaskModal(true);
   }
 
   function closeCreateTaskModal() {
     setSelectedColumn(null);
+    setShowCreateTaskModal(false);
   }
 
   async function handleBoardCreated(createdBoard) {
@@ -645,11 +692,14 @@ function App() {
         if (view === "dashboard") setStaffRefreshKey((currentKey) => currentKey + 1);
         if (view === "report") { setSelectedReportUserId(null); setSelectedReportDate(null); }
         setActiveView(view);
-        const path=view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':'/';
+        const path=view==='completed'?'/completed':view==='desktop-notifications'?'/settings/desktop-notifications':view==='ppc-planning'?'/ppc/planning':view==='ppc-arrivals'?'/ppc/raw-material-arrivals':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':view==='report'?'/reports/monthly':'/';
         window.history.pushState({},'',path);
       }}
       onNotificationNavigate={(notification) => {
-        if (isAdmin) {
+        if (notification.rawMaterialArrivalId) {
+          setActiveView("ppc-arrivals");
+          window.history.pushState({}, "", `/ppc/raw-material-arrivals?arrivalId=${notification.rawMaterialArrivalId}`);
+        } else if (isAdmin) {
           if (notification.boardId) {
             setSelectedBoardId(notification.boardId);
             setActiveView("project");
@@ -674,17 +724,27 @@ function App() {
       onLogout={logout}
     >
     <div className="app">
-      {activeView === "users-admin" && isAdmin ? (
+      {activeView === "completed" ? (
+        <CompletedTasksPage />
+      ) : activeView === "desktop-notifications" ? (
+        <DesktopNotificationsPage />
+      ) : activeView === "users-admin" && isAdmin ? (
         <UserManagementPage departments={departments} onDepartmentCreated={handleDepartmentCreated} />
       ) : activeView === "data-management" && isAdmin ? (
         <DataManagementPage />
       ) : activeView === "client-access" && isAdmin ? (
         <ClientAccessPage />
+      ) : activeView === "ppc-planning" && (isAdmin || user?.departmentName?.toUpperCase() === "PPC") ? (
+        <PpcPlanningPage />
+      ) : activeView === "ppc-arrivals" && (isAdmin || user?.departmentName?.toUpperCase() === "PPC") ? (
+        <RawMaterialArrivalsPage />
       ) : activeView === "reviews" ? (
         <ReviewQueuePage onRefresh={() => setStaffRefreshKey((currentKey) => currentKey + 1)} />
       ) : activeView === "history" ? (
         <HistoryPage key={`${user?.userId}-${user?.role}`} user={user} users={users} departments={departments} />
       ) : activeView === "report" ? (
+        <MonthlyReportsPage user={user} departments={departments} />
+      ) : activeView === "legacy-report" ? (
         user?.role === "STAFF" || selectedReportUserId ? (
           <DailyReportPage user={user} selectedUserId={selectedReportUserId || user.userId} selectedDate={selectedReportDate} onBack={() => { setSelectedReportUserId(null); setSelectedReportDate(null); setActiveView(user.role === "STAFF" ? "dashboard" : "report"); }} onViewSnapshot={(id, date) => { setSelectedReportUserId(id); setSelectedReportDate(date); setActiveView("history"); }} />
         ) : (
@@ -692,7 +752,7 @@ function App() {
         )
       ) : activeView === "dashboard" ? (
         user?.role === "STAFF" ? (
-          <StaffDashboard user={user} refreshKey={staffRefreshKey} onOpenKanban={() => setActiveView("personal")} onOpenReport={() => { setSelectedReportUserId(user.userId); setSelectedReportDate(null); setActiveView("report"); }} />
+          <StaffDashboard user={user} refreshKey={staffRefreshKey} onOpenKanban={() => setActiveView("personal")} onOpenReport={() => { setSelectedReportUserId(user.userId); setSelectedReportDate(null); setActiveView("report"); }} onOpenPlanning={() => setActiveView("ppc-planning")} onOpenRawMaterials={() => setActiveView("ppc-arrivals")} />
         ) : user?.role === "ADMIN" ? (
           <AdminDashboard
             user={user}
@@ -716,6 +776,8 @@ function App() {
             onOpenKanban={() => setActiveView("personal")}
             onOpenReport={() => { setSelectedReportUserId(null); setSelectedReportDate(null); setActiveView("report"); }}
             onOpenReviews={() => setActiveView("reviews")}
+            onOpenPlanning={() => setActiveView("ppc-planning")}
+            onOpenRawMaterials={() => setActiveView("ppc-arrivals")}
             onViewKanban={(staffId) => {
               setSelectedStaffId(String(staffId));
               setActiveView("staff");
@@ -728,7 +790,7 @@ function App() {
           />
         )
       ) : activeView === "personal" ? (
-        <PersonalKanban user={user} />
+        <PersonalKanban user={user} users={users} departments={departments} />
       ) : activeView === "staff" ? (
         <>
           <div className="board-toolbar staff-selector-toolbar">
@@ -758,10 +820,7 @@ function App() {
         </>
       ) : (
         <>
-      <h1>
-        {boards.find((board) => board.id === selectedBoardId)?.name ||
-          "Company Kanban"}
-      </h1>
+      <h1>{selectedBoardId === "general" ? "General Tasks" : boards.find((board) => board.id === selectedBoardId)?.name || "Company Kanban"}</h1>
 
       <div className="board-toolbar">
         <div className="toolbar-field">
@@ -796,11 +855,10 @@ function App() {
           <select
             id="board-select"
             value={selectedBoardId ?? ""}
-            onChange={(event) =>
-              setSelectedBoardId(Number(event.target.value))
-            }
-            disabled={boards.length === 0}
-          >
+            onChange={(event) => setSelectedBoardId(event.target.value === "general" ? "general" : Number(event.target.value))}
+            disabled={boards.length === 0 && !canShowGeneralBoard}
+            >
+            {canShowGeneralBoard && <option value="general">General Tasks</option>}
             {boards.map((board) => (
               <option key={board.id} value={board.id}>
                 {board.name}
@@ -817,7 +875,7 @@ function App() {
               onClick={() => setBoardToEdit(
                 boards.find((board) => board.id === selectedBoardId) ?? null
               )}
-              disabled={selectedBoardId === null}
+              disabled={selectedBoardId === null || selectedBoardId === "general"}
             >
               Edit Board
             </button>
@@ -829,7 +887,7 @@ function App() {
                   boards.find((board) => board.id === selectedBoardId) ?? null
                 )
               }
-              disabled={selectedBoardId === null}
+              disabled={selectedBoardId === null || selectedBoardId === "general"}
             >
               Delete Board
             </button>
@@ -842,15 +900,40 @@ function App() {
             </button>
           </>
         )}
+        <button type="button" className="create-board-button" onClick={() => openCreateTaskModal(null)}>
+          + Add Task
+        </button>
       </div>
 
-      {selectedDepartmentId !== null && boards.length === 0 && (
+      {selectedDepartmentId !== null && boards.length === 0 && !canShowGeneralBoard && (
         <div className="empty-state">
           <p>No boards found for this department.</p>
         </div>
       )}
 
-      {selectedBoardId !== null && (
+      {selectedBoardId === "general" && (
+        <div className="kanban-board general-task-board">
+          {[
+            ["DRAFT", "To Do"],
+            ["DOING", "In Progress"],
+            ["REVIEW", "Review"],
+            ["DONE", "Done"],
+          ].map(([status, label]) => (
+            <div className="kanban-column" key={status}>
+              <div className="column-header">
+                <h2>{label}</h2>
+              </div>
+              <div className="task-list">
+                {generalTasks.filter((task) => task.status === status).map((task) => (
+                  <div key={task.id} className="task-card task-card--read-only"><TaskCardContent task={task} /></div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedBoardId !== null && selectedBoardId !== "general" && (
         <div className="kanban-board">
           {columns.map((column) => (
             <div
@@ -860,13 +943,6 @@ function App() {
             >
               <div className="column-header">
                 <h2>{column.name}</h2>
-                <button
-                  type="button"
-                  className="add-task-button"
-                  onClick={() => openCreateTaskModal(column)}
-                >
-                  + Add Task
-                </button>
               </div>
 
               <div className="task-list">
@@ -926,17 +1002,22 @@ function App() {
         </>
       )}
 
-      {selectedColumn && (
+      {showCreateTaskModal && (
         <CreateTaskModal
           isOpen
           column={selectedColumn}
+          board={boards.find((board) => board.id === selectedBoardId) ?? null}
+          boards={boards}
+          departmentId={selectedDepartmentId}
+          canChooseGeneral={canShowGeneralBoard}
           users={users}
           user={user}
           onClose={closeCreateTaskModal}
-          onCreated={async () => {
+          onCreated={async (createdTask) => {
             setStaffRefreshKey((currentKey) => currentKey + 1);
-            if (selectedBoardId !== null) {
-              await loadBoard(selectedBoardId);
+            if (createdTask?.boardId) {
+              setSelectedBoardId(createdTask.boardId);
+              await loadBoard(createdTask.boardId);
             }
           }}
         />
