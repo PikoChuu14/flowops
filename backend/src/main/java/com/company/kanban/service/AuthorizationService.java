@@ -137,16 +137,23 @@ public class AuthorizationService {
         }
     }
 
-    public void requireReviewActionAccess(User currentUser, Task task) {
+    public void requireReviewActionAccess(User currentUser, Task task, com.company.kanban.dto.ReviewAction action) {
         if (isAdmin(currentUser)) {
             return;
         }
 
-        if (currentUser == null || currentUser.getRole() != Role.MANAGER) {
+        if (currentUser == null) {
             throw forbidden();
         }
 
         requireTaskAccess(currentUser, task);
+        if (currentUser.getRole() == Role.MANAGER) return;
+        if (action == com.company.kanban.dto.ReviewAction.RETURN
+                && task.getDepartment() != null
+                && "RDD".equalsIgnoreCase(task.getDepartment().getName())
+                && task.getAssignee() != null
+                && Objects.equals(currentUser.getId(), task.getAssignee().getId())) return;
+        throw forbidden();
     }
 
     public void requireAssignableUser(User currentUser, User assignee) {

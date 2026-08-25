@@ -94,6 +94,29 @@ public class DataManagementService {
         return new DataManagementStatusResponse(operationStatus,"Data management operation status");
     }
     public String backupDirectory(){ return backupDirectory.toString(); }
+    /** Keep daily history for 30 days, weekly representatives for 12 weeks, and monthly representatives for 12 months. */
+    public synchronized int rotateBackups(LocalDateTime now) {
+        try {
+            List<BackupFile> files = listBackupFiles();
+            if (files.size() <= 1) return 0;
+            Set<String> keep = new HashSet<>();
+            files.stream().filter(b -> b.entry == null || "COMPLETED".equalsIgnoreCase(b.entry.status()) || "AVAILABLE".equalsIgnoreCase(b.entry.status()))
+                    .max(Comparator.comparing(BackupFile::createdAt)).ifPresent(b -> keep.add(b.name()));
+            files.stream().filter(b -> b.entry != null && "PRE_RESTORE".equalsIgnoreCase(b.entry.backupType())).forEach(b -> keep.add(b.name()));
+            for (BackupFile b : files) {
+                long age = Duration.between(b.createdAt(), now).toDays();
+                if (age <= 30) keep.add(b.name());
+                else if (age <= 30 + 7 * 12) keep.add(representative(files, b.createdAt(), 7));
+                else if (age <= 365) keep.add(representative(files, b.createdAt(), 30));
+            }
+            int deleted = 0; Map<String, RegistryEntry> registry = readRegistry();
+            for (BackupFile b : files) if (!keep.contains(b.name()) && files.size() - deleted > 1) {
+                Files.deleteIfExists(b.path()); registry.remove(b.name()); deleted++;
+            }
+            if (deleted > 0) writeRegistry(registry);
+            return deleted;
+        } catch (IOException e) { log.warn("Backup rotation skipped: {}", e.getMessage()); return 0; }
+    }
     public boolean canOpenBackupFolder(String remoteAddress) {
         boolean local = "127.0.0.1".equals(remoteAddress) || "::1".equals(remoteAddress) || "0:0:0:0:0:0:0:1".equals(remoteAddress);
         return local && System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("windows");
@@ -128,7 +151,10 @@ public class DataManagementService {
     private void writeRegistry(Map<String,RegistryEntry> entries)throws IOException{ Path temp=backupDirectory.resolve("backup-metadata.json.tmp");mapper.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(),entries);Files.move(temp,metadataFile,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
     private LocalDateTime parseTimestamp(String name){ var m=java.util.regex.Pattern.compile("(\\d{8})[_-](\\d{4,6})").matcher(name);if(!m.find())return null;try{String t=m.group(2);if(t.length()==4)t+="00";return LocalDateTime.parse(m.group(1)+t,DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));}catch(Exception e){return null;} }
     private String findMatchingBackup(LocalDateTime date){if(date==null)return null;return listBackups().stream().filter(b->Math.abs(Duration.between(date,b.createdAt()).toMinutes())<=2).map(BackupResponse::filename).findFirst().orElse(null);}
+    private List<BackupFile> listBackupFiles() throws IOException { Map<String, RegistryEntry> registry = readRegistry(); try (var stream = Files.list(backupDirectory)) { return stream.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(p)).filter(this::isBackup).map(p -> { RegistryEntry e = registry.get(p.getFileName().toString()); LocalDateTime created; try { created = e == null ? LocalDateTime.ofInstant(Files.getLastModifiedTime(p).toInstant(), ZoneId.systemDefault()) : e.createdAt(); } catch (IOException ex) { created = LocalDateTime.MIN; } return new BackupFile(p, p.getFileName().toString(), created, e); }).toList(); } }
+    private String representative(List<BackupFile> files, LocalDateTime date, int bucketDays) { return files.stream().filter(b -> Math.abs(Duration.between(b.createdAt(), date).toDays()) <= bucketDays).min(Comparator.comparing(b -> Math.abs(Duration.between(b.createdAt(), date).toMinutes()))).map(BackupFile::name).orElse(""); }
     private ResponseStatusException failure(String message,Exception e){log.error(message,e);return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,message);}
+    private record BackupFile(Path path, String name, LocalDateTime createdAt, RegistryEntry entry) {}
     public record RegistryEntry(String filename, LocalDateTime createdAt, String backupType, String reason, String sourceDatabase, String archivedDatabaseName, String status){}
     private record Db(String host,int port,String name){}
 }

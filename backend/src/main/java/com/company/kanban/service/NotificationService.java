@@ -117,6 +117,31 @@ public class NotificationService {
                         actor.getName() + " submitted their Daily Report for " + date + ".", null, null, report.getId()));
     }
 
+    public void notifyRequestCreated(InterdepartmentRequest request, User actor) {
+        userRepository.findByDepartmentIdAndRole(request.getTargetDepartment().getId(), Role.MANAGER).forEach(manager ->
+                notifyRequest(manager, actor, NotificationType.REQUEST_CREATED, "New interdepartment request",
+                        request.getRequestingDepartment().getName() + " requested: " + request.getTitle(), request.getId()));
+    }
+
+    public void notifyRequestStatusChanged(InterdepartmentRequest request, User actor) {
+        NotificationType type = switch (request.getStatus()) {
+            case ACKNOWLEDGED -> NotificationType.REQUEST_ACKNOWLEDGED;
+            case IN_PROGRESS -> NotificationType.REQUEST_IN_PROGRESS;
+            case COMPLETED -> NotificationType.REQUEST_COMPLETED;
+            case REJECTED -> NotificationType.REQUEST_REJECTED;
+            default -> null;
+        };
+        if (type != null) notifyRequest(request.getCreatedBy(), actor, type, "Interdepartment request updated",
+                request.getTitle() + " is now " + request.getStatus().name().replace('_', ' ').toLowerCase() + ".", request.getId());
+    }
+
+    private void notifyRequest(User recipient, User actor, NotificationType type, String title, String message, Long requestId) {
+        if (recipient == null || actor == null || recipient.getStatus() != AccountStatus.ACTIVE || recipient.getId().equals(actor.getId())) return;
+        Notification notification = new Notification(recipient, type, title, message, requestId);
+        notification.setDestination("/requests/" + requestId);
+        notificationRepository.save(notification);
+    }
+
     private void notifyUser(User recipient, User actor, NotificationType type, String title, String message, Task task, Long boardId) {
         notifyUser(recipient, actor, type, title, message, task, boardId, null);
     }
@@ -139,6 +164,7 @@ public class NotificationService {
     private NotificationResponse toResponse(Notification n) {
         return new NotificationResponse(n.getId(), n.getType(), n.getTitle(), n.getMessage(), n.isRead(),
                 n.getCreatedAt(), n.getTaskId(), n.getBoardId(), n.getDailyReportId(), n.getRawMaterialArrivalId(),
+                n.getRequestId(),
                 n.getDestination() == null ? destination(n.getType(), n.getTaskId(), n.getBoardId(), n.getDailyReportId(), n.getRawMaterialArrivalId()) : n.getDestination());
     }
 

@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { getNavigationItems } from "../src/components/navigationModel.js";
 
 test("PPC staff navigation follows operational priority order", () => {
-  assert.deepEqual(getNavigationItems({ role: "STAFF", departmentName: "PPC" }).map((item) => item[0]), ["dashboard", "personal", "completed", "ppc-arrivals", "ppc-planning", "project", "report", "desktop-notifications"]);
+  assert.deepEqual(getNavigationItems({ role: "STAFF", departmentName: "PPC" }).map((item) => item[0]), ["dashboard", "personal", "completed", "ppc-arrivals", "ppc-planning", "requests", "project", "report", "desktop-notifications"]);
 });
 test("PPC manager navigation puts team and reviews after project work", () => {
-  assert.deepEqual(getNavigationItems({ role: "MANAGER", departmentName: "PPC" }).map((item) => item[0]), ["dashboard", "personal", "completed", "ppc-arrivals", "ppc-planning", "project", "staff", "reviews", "report", "desktop-notifications"]);
+  assert.deepEqual(getNavigationItems({ role: "MANAGER", departmentName: "PPC" }).map((item) => item[0]), ["dashboard", "personal", "completed", "ppc-arrivals", "ppc-planning", "requests", "project", "staff", "reviews", "report", "desktop-notifications"]);
 });
 test("non-PPC staff does not see PPC modules", () => {
   assert.equal(getNavigationItems({ role: "STAFF", departmentName: "RDD" }).some((item) => item[0].startsWith("ppc-")), false);

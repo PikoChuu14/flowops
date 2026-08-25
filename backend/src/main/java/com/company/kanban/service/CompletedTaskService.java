@@ -25,10 +25,10 @@ public class CompletedTaskService {
     @Transactional(readOnly = true)
     public Page<TaskResponse> find(LocalDate from, LocalDate to, User user, Pageable pageable) {
         if (user == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
-        Long departmentId = user.getRole() == Role.ADMIN ? null : user.getDepartment().getId();
-        Long assigneeId = user.getRole() == Role.STAFF ? user.getId() : null;
-        LocalDateTime start = from == null ? null : from.atStartOfDay();
-        LocalDateTime end = to == null ? null : to.plusDays(1).atStartOfDay();
+        Long departmentId = user.getRole() == Role.ADMIN ? -1L : user.getDepartment().getId();
+        Long assigneeId = user.getRole() == Role.STAFF ? user.getId() : -1L;
+        LocalDateTime start = from == null ? LocalDateTime.of(1900, 1, 1, 0, 0) : from.atStartOfDay();
+        LocalDateTime end = to == null ? LocalDateTime.of(9999, 12, 31, 0, 0) : to.plusDays(1).atStartOfDay();
         return tasks.findCompletedHistory(start, end, assigneeId, departmentId, pageable).map(this::toResponse);
     }
 

@@ -1,0 +1,27 @@
+package com.company.kanban.service;
+import com.company.kanban.dto.*;
+import com.company.kanban.entity.*;
+import com.company.kanban.repository.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.*;
+@Service public class TaskCheckpointService {
+    private final TaskRepository tasks; private final TaskCheckpointRepository checkpoints; private final AuthorizationService authorization;
+    public TaskCheckpointService(TaskRepository tasks,TaskCheckpointRepository checkpoints,AuthorizationService authorization){this.tasks=tasks;this.checkpoints=checkpoints;this.authorization=authorization;}
+    private static final ZoneId ZONE=ZoneId.of("Asia/Kuala_Lumpur");
+    @Transactional(readOnly=true) public List<TaskCheckpointResponse> list(Long taskId,User user){Task task=task(taskId); requireRdd(task,user,false); List<TaskCheckpoint> items=checkpoints.findByTaskIdOrderByPositionAsc(taskId); return items.stream().map(c->response(c,items)).toList();}
+    @Transactional public TaskCheckpointResponse create(Long taskId,CreateCheckpointRequest input,User user){Task task=task(taskId); requireRdd(task,user,true); int position=checkpoints.countByTaskId(taskId)+1; TaskCheckpoint saved=checkpoints.save(new TaskCheckpoint(task,input.title().trim(),input.description(),input.dueDate(),position)); return response(saved,checkpoints.findByTaskIdOrderByPositionAsc(taskId));}
+    @Transactional public TaskCheckpointResponse update(Long id,UpdateCheckpointRequest input,User user){TaskCheckpoint c=checkpoint(id); requireRdd(c.getTask(),user,true); if(input.title()!=null)c.setTitle(input.title().trim());c.setDescription(input.description());c.setDueDate(input.dueDate());if(input.status()!=null){c.setStatus(input.status());c.setCompletedAt(input.status()==CheckpointStatus.COMPLETED?LocalDateTime.now():null);} if(input.position()!=null) reorder(c,input.position()); TaskCheckpoint saved=checkpoints.save(c); return response(saved,checkpoints.findByTaskIdOrderByPositionAsc(c.getTask().getId()));}
+    @Transactional public void delete(Long id,User user){TaskCheckpoint c=checkpoint(id); requireRdd(c.getTask(),user,true); Long taskId=c.getTask().getId(); checkpoints.delete(c); checkpoints.flush(); List<TaskCheckpoint> items=checkpoints.findByTaskIdOrderByPositionAsc(taskId); for(int i=0;i<items.size();i++)items.get(i).setPosition(i+1); checkpoints.saveAll(items);}
+    private void reorder(TaskCheckpoint checkpoint,int requested){List<TaskCheckpoint> items=new ArrayList<>(checkpoints.findByTaskIdOrderByPositionAsc(checkpoint.getTask().getId())); items.removeIf(c->Objects.equals(c.getId(),checkpoint.getId())); int position=Math.max(1,Math.min(requested,items.size()+1)); items.add(position-1,checkpoint); for(int i=0;i<items.size();i++)items.get(i).setPosition(i+1);}
+    private Task task(Long id){return tasks.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Task not found"));} private TaskCheckpoint checkpoint(Long id){return checkpoints.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Checkpoint not found"));} private ResponseStatusException forbidden(){return new ResponseStatusException(HttpStatus.FORBIDDEN,"Checkpoints are available only for RDD tasks");}
+    private void requireRdd(Task task,User user,boolean modify){authorization.requireTaskAccess(user,task); if(task.getDepartment()==null || !"RDD".equalsIgnoreCase(task.getDepartment().getName())) throw forbidden(); if(modify && !canModify(task,user)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"You do not have permission to edit these checkpoints");}
+    private boolean canModify(Task task,User user){if(user==null)return false; if(user.getRole()==Role.ADMIN)return true; if(user.getDepartment()==null || task.getDepartment()==null || !Objects.equals(user.getDepartment().getId(),task.getDepartment().getId()))return false; return user.getRole()==Role.MANAGER || (task.getAssignee()!=null&&Objects.equals(task.getAssignee().getId(),user.getId())) || (task.getCreatedBy()!=null&&Objects.equals(task.getCreatedBy().getId(),user.getId()));}
+    private TaskCheckpointResponse response(TaskCheckpoint c,List<TaskCheckpoint> items){int total=items.size();int completed=(int)items.stream().filter(x->x.getStatus()==CheckpointStatus.COMPLETED).count();Integer percent=total==0?null:Math.round(completed*100f/total);String current=items.stream().filter(x->x.getStatus()==CheckpointStatus.IN_PROGRESS).findFirst().orElseGet(()->items.stream().filter(x->x.getStatus()==CheckpointStatus.PENDING).findFirst().orElse(null)) instanceof TaskCheckpoint next?next.getTitle():null;String due=dueState(c);return new TaskCheckpointResponse(c.getId(),c.getTask().getId(),c.getTitle(),c.getDescription(),c.getDueDate(),c.getStatus(),c.getPosition(),c.getCompletedAt(),c.getCreatedAt(),c.getUpdatedAt(),completed,total,percent,current,due);}
+    private String dueState(TaskCheckpoint c){if(c.getDueDate()==null||c.getStatus()==CheckpointStatus.COMPLETED)return null; LocalDate today=LocalDate.now(ZONE); if(c.getDueDate().isBefore(today))return "OVERDUE"; if(c.getDueDate().equals(today))return "DUE_TODAY"; if(c.getDueDate().equals(today.plusDays(1)))return "DUE_TOMORROW"; return null;}
+}

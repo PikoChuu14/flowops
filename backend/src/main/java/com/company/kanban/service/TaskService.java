@@ -49,7 +49,7 @@ public class TaskService {
             DepartmentRepository departmentRepository,
             AuthorizationService authorizationService,
             NotificationService notificationService,
-            @Value("${app.tasks.done-visible-days:7}") int doneVisibleDays) {
+            @Value("${flowops.retention.completed-task-visible-days:${app.tasks.done-visible-days:7}}") int doneVisibleDays) {
 
         this.taskRepository = taskRepository;
         this.kanbanColumnRepository = kanbanColumnRepository;
@@ -405,7 +405,7 @@ public class TaskService {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Task not found"));
-        authorizationService.requireReviewActionAccess(currentUser, task);
+        authorizationService.requireReviewActionAccess(currentUser, task, request.action());
 
         if (task.getStatus() != TaskStatus.REVIEW) {
             throw new ResponseStatusException(
