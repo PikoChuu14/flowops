@@ -31,6 +31,7 @@ public class Notification {
     private Long boardId;
     private Long dailyReportId;
     private Long rawMaterialArrivalId;
+    private Long requestId;
 
     @Column(length = 500)
     private String destination;
@@ -59,6 +60,9 @@ public class Notification {
                         Long taskId, Long boardId, Long dailyReportId, Long rawMaterialArrivalId) {
         this(recipient, type, title, message, taskId, boardId, dailyReportId); this.rawMaterialArrivalId = rawMaterialArrivalId;
     }
+    public Notification(User recipient, NotificationType type, String title, String message, Long requestId) {
+        this(recipient, type, title, message, null, null, null); this.requestId = requestId;
+    }
 
     @PrePersist
     void onCreate() {
@@ -74,6 +78,7 @@ public class Notification {
     public Long getBoardId() { return boardId; }
     public Long getDailyReportId() { return dailyReportId; }
     public Long getRawMaterialArrivalId() { return rawMaterialArrivalId; }
+    public Long getRequestId() { return requestId; }
     public String getDestination() { return destination; }
     public void setDestination(String destination) { this.destination = destination; }
     public boolean isRead() { return read; }

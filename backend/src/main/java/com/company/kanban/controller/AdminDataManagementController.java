@@ -15,6 +15,6 @@ public class AdminDataManagementController {
     @GetMapping("/archives") public List<ArchiveResponse> archives(){return service.listArchives();}
     @PostMapping("/restore") public DataManagementStatusResponse restore(@RequestBody RestoreRequest request){return service.queueRestore(request);}
     @GetMapping("/status") public DataManagementStatusResponse status(){return service.status();}
-    @GetMapping("/location") public Map<String,Object> location(HttpServletRequest request){return Map.of("backupDirectory",service.backupDirectory(),"canOpenFolder",service.canOpenBackupFolder(request.getRemoteAddr()));}
+    @GetMapping("/location") public Map<String,Object> location(HttpServletRequest request, @org.springframework.beans.factory.annotation.Value("${flowops.retention.completed-task-visible-days:7}") int taskDays, @org.springframework.beans.factory.annotation.Value("${flowops.retention.notification-days:90}") int notificationDays){return Map.of("backupDirectory",service.backupDirectory(),"canOpenFolder",service.canOpenBackupFolder(request.getRemoteAddr()),"completedTaskVisibleDays",taskDays,"notificationRetentionDays",notificationDays,"backupPolicy","30 daily / 12 weekly / 12 monthly");}
     @PostMapping("/open-folder") public void openFolder(HttpServletRequest request){service.openBackupFolder(request.getRemoteAddr());}
 }

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api/apiFetch";
 import CreateTaskModal from "../components/CreateTaskModal";
+import RddTaskActions from "../components/RddTaskActions";
 
 const API_BASE_URL = "";
 const DRAG_START_THRESHOLD = 6;
+const compactDate = (value) => value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Kuala_Lumpur" }).format(new Date(`${value}T00:00:00+08:00`)) : "";
 
 const STATUSES = [
   { value: "DRAFT", label: "Draft" },
@@ -33,7 +35,11 @@ function PersonalKanban({ user, users = [], departments = [] }) {
         throw new Error("Failed to load personal tasks");
       }
 
-      setTasks(await response.json());
+      const tasks = await response.json();
+      const rddTasks = tasks.filter((task) => task.departmentName?.toUpperCase() === "RDD");
+      const summaries = rddTasks.length ? await apiFetch(`${API_BASE_URL}/api/tasks/checkpoints/summary?${rddTasks.map((task) => `taskIds=${task.id}`).join("&")}`) : null;
+      const summaryByTask = summaries?.ok ? Object.fromEntries((await summaries.json()).map((summary) => [summary.taskId, summary])) : {};
+      setTasks(tasks.map((task) => ({ ...task, checkpointSummary: summaryByTask[task.id] })));
     } catch (error) {
       console.error("Failed to load personal Kanban:", error);
     }
@@ -100,6 +106,7 @@ function PersonalKanban({ user, users = [], departments = [] }) {
   }
 
   function handlePointerDown(event, task) {
+    if (task.departmentName?.toUpperCase() === "RDD") return;
     if (event.button !== 0) {
       return;
     }
@@ -246,23 +253,21 @@ function PersonalKanban({ user, users = [], departments = [] }) {
                       )}
 
                     <div
-                      className={`task-card ${
+                      className={`task-card priority-card-${String(task.priority || "MEDIUM").toLowerCase()} ${
                         draggedTaskId === task.id ? "task-card--dragging" : ""
                       }`}
                       data-personal-task-id={task.id}
                       data-personal-status={status.value}
                       onPointerDown={(event) => handlePointerDown(event, task)}
                     >
-                      <h3>{task.title}</h3>
+                      <h3 title={task.title}>{task.title}</h3>
                       <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
                       <p>{task.description}</p>
-                      <div className="task-meta">
-                        <span>{task.priority} · Workload {task.workload ?? "—"}</span>
-                      </div>
-                      {task.dueDate && <small>Due: {task.dueDate}</small>}
-                      {task.createdByName && (
-                        <small>Created by {task.createdByName}</small>
-                      )}
+                      <div className={`task-priority-accent priority-${String(task.priority || "MEDIUM").toLowerCase()}`} title={`Priority: ${task.priority || "MEDIUM"}`} aria-label={`Priority: ${task.priority || "MEDIUM"}`} />
+                      {task.workload != null && <small className="task-workload">Workload {task.workload}</small>}
+                      <div className="task-card-footer"><span>{task.assigneeName || "Unassigned"}</span>{task.dueDate && <span>{compactDate(task.dueDate)}</span>}</div>
+                      {task.checkpointSummary?.currentOrNextTitle && <small className="task-checkpoint-hint"><span>{task.checkpointSummary.currentOrNextLabel}</span><strong>{task.checkpointSummary.currentOrNextTitle}</strong></small>}
+                      <RddTaskActions task={task} user={user} onChanged={loadMyTasks} />
                     </div>
 
                     {dropIndicator?.status === status.value &&
@@ -292,16 +297,13 @@ function PersonalKanban({ user, users = [], departments = [] }) {
             width: `${dragPreview.width}px`,
           }}
         >
-          <div className="task-card drag-preview-card">
-            <h3>{dragPreview.task.title}</h3>
+          <div className={`task-card drag-preview-card priority-card-${String(dragPreview.task.priority || "MEDIUM").toLowerCase()}`}>
+            <h3 title={dragPreview.task.title}>{dragPreview.task.title}</h3>
             <small className="task-board-name">{dragPreview.task.generalTask ? "GENERAL · PPC" : dragPreview.task.boardName}</small>
             <p>{dragPreview.task.description}</p>
-            <div className="task-meta">
-              <span>
-                {dragPreview.task.priority} · Workload {dragPreview.task.workload ?? "—"}
-              </span>
-            </div>
-            {dragPreview.task.dueDate && <small>Due: {dragPreview.task.dueDate}</small>}
+            <div className={`task-priority-accent priority-${String(dragPreview.task.priority || "MEDIUM").toLowerCase()}`} title={`Priority: ${dragPreview.task.priority || "MEDIUM"}`} aria-label={`Priority: ${dragPreview.task.priority || "MEDIUM"}`} />
+            {dragPreview.task.workload != null && <small className="task-workload">Workload {dragPreview.task.workload}</small>}
+            <div className="task-card-footer"><span>{dragPreview.task.assigneeName || "Unassigned"}</span>{dragPreview.task.dueDate && <span>{compactDate(dragPreview.task.dueDate)}</span>}</div>
           </div>
         </div>
       )}

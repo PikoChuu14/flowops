@@ -45,6 +45,8 @@ public class SecurityConfig {
             "/activate",
             "/dashboard",
             "/projects",
+            "/requests",
+            "/requests/**",
             "/reviews",
             "/reports",
             "/reports/**",

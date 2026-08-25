@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api/apiFetch";
+import RddTaskActions from "../components/RddTaskActions";
 
 const API_BASE_URL = "";
+const compactDate = (value) => value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Kuala_Lumpur" }).format(new Date(`${value}T00:00:00+08:00`)) : "";
 const STATUSES = [
   { value: "DRAFT", label: "Draft" },
   { value: "DOING", label: "Doing" },
@@ -9,7 +11,7 @@ const STATUSES = [
   { value: "DONE", label: "Done" },
 ];
 
-function StaffKanban({ staffUser, refreshKey, onTaskSelected, onTaskChanged, onReassignTask }) {
+function StaffKanban({ staffUser, currentUser, refreshKey, onTaskSelected, onTaskChanged, onReassignTask }) {
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState("");
 
@@ -27,7 +29,11 @@ function StaffKanban({ staffUser, refreshKey, onTaskSelected, onTaskChanged, onR
         if (!response.ok) {
           throw new Error(`Failed to load staff tasks (${response.status})`);
         }
-        setTasks(await response.json());
+        const tasks = await response.json();
+        const rddTasks = tasks.filter((task) => task.departmentName?.toUpperCase() === "RDD");
+        const summaries = rddTasks.length ? await apiFetch(`${API_BASE_URL}/api/tasks/checkpoints/summary?${rddTasks.map((task) => `taskIds=${task.id}`).join("&")}`) : null;
+        const summaryByTask = summaries?.ok ? Object.fromEntries((await summaries.json()).map((summary) => [summary.taskId, summary])) : {};
+        setTasks(tasks.map((task) => ({ ...task, checkpointSummary: summaryByTask[task.id] })));
       } catch (loadError) {
         console.error("Failed to load staff Kanban:", loadError);
         setError("Unable to load this staff member's Kanban.");
@@ -85,7 +91,7 @@ function StaffKanban({ staffUser, refreshKey, onTaskSelected, onTaskChanged, onR
                   .filter((task) => task.status === status.value)
                   .map((task) => (
                     <div
-                      className="task-card staff-task-card"
+                      className={`task-card staff-task-card priority-card-${String(task.priority || "MEDIUM").toLowerCase()}`}
                       key={task.id}
                       onClick={() => onTaskSelected(task)}
                       role="button"
@@ -96,13 +102,14 @@ function StaffKanban({ staffUser, refreshKey, onTaskSelected, onTaskChanged, onR
                         }
                       }}
                     >
-                      <h3>{task.title}</h3>
+                      <h3 title={task.title}>{task.title}</h3>
                       <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
                       <p>{task.description}</p>
-                      <div className="task-meta">
-                        <span>{task.priority} · Workload {task.workload ?? "—"}</span>
-                      </div>
-                      {task.dueDate && <small>Due: {task.dueDate}</small>}
+                      <div className={`task-priority-accent priority-${String(task.priority || "MEDIUM").toLowerCase()}`} title={`Priority: ${task.priority || "MEDIUM"}`} aria-label={`Priority: ${task.priority || "MEDIUM"}`} />
+                      {task.workload != null && <small className="task-workload">Workload {task.workload}</small>}
+                      <div className="task-card-footer"><span>{task.assigneeName || "Unassigned"}</span>{task.dueDate && <span>{compactDate(task.dueDate)}</span>}</div>
+                      {task.checkpointSummary?.currentOrNextTitle && <small className="task-checkpoint-hint"><span>{task.checkpointSummary.currentOrNextLabel}</span><strong>{task.checkpointSummary.currentOrNextTitle}</strong></small>}
+                      <RddTaskActions task={task} user={currentUser} onChanged={(updated) => setTasks((items) => items.map((item) => item.id === updated.id ? updated : item))} />
 
                       {status.value === "REVIEW" && (
                         <div className="review-actions" onClick={(event) => event.stopPropagation()}>

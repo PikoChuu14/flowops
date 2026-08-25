@@ -27,6 +27,8 @@ import PpcPlanningPage from "./pages/PpcPlanningPage";
 import RawMaterialArrivalsPage from "./pages/RawMaterialArrivalsPage";
 import DesktopNotificationsPage from "./pages/DesktopNotificationsPage";
 import CompletedTasksPage from "./pages/CompletedTasksPage";
+import InterdepartmentRequestsPage from "./pages/InterdepartmentRequestsPage";
+import RddTaskActions from "./components/RddTaskActions";
 import { apiFetch } from "./api/apiFetch";
 import { useAuth } from "./context/AuthContext";
 
@@ -38,6 +40,7 @@ function viewForLocation() {
   const hasTaskTarget = path === "/" && new URLSearchParams(window.location.search).has("taskId");
   if (path === "/settings/desktop-notifications") return "desktop-notifications";
   if (path === "/completed") return "completed";
+  if (path === "/requests" || path.startsWith("/requests/")) return "requests";
   if (path === "/ppc/planning") return "ppc-planning";
   if (path === "/ppc/raw-material-arrivals") return "ppc-arrivals";
   if (path === "/reviews") return "reviews";
@@ -49,24 +52,27 @@ function viewForLocation() {
   return hasTaskTarget ? "personal" : "dashboard";
 }
 
-function TaskCardContent({ task }) {
+function formatCompactDate(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Kuala_Lumpur" }).format(new Date(`${value}T00:00:00+08:00`));
+}
+
+function TaskCardContent({ task, showBoardName = true }) {
   return (
     <>
-      <h3>{task.title}</h3>
+      <h3 title={task.title}>{task.title}</h3>
 
       <p>{task.description}</p>
 
-      <small className="task-board-name">{task.generalTask ? "GENERAL · PPC" : task.boardName}</small>
+      {showBoardName && <small className="task-board-name">{task.generalTask ? "General Task" : task.boardName}</small>}
 
-      <div className="task-meta">
-        <span>{task.priority} · Workload {task.workload ?? "—"}</span>
+      <div className={`task-priority-accent priority-${String(task.priority || "MEDIUM").toLowerCase()}`} title={`Priority: ${task.priority || "MEDIUM"}`} aria-label={`Priority: ${task.priority || "MEDIUM"}`} />
 
-        {task.assigneeName && <span>{task.assigneeName}</span>}
-      </div>
+      {task.workload != null && <small className="task-workload">Workload {task.workload}</small>}
 
-      {task.dueDate && <small>Due: {task.dueDate}</small>}
+      <div className="task-card-footer"><span>{task.assigneeName || "Unassigned"}</span>{task.dueDate && <span>{formatCompactDate(task.dueDate)}</span>}</div>
 
-      {task.createdByName && <small>Created by {task.createdByName}</small>}
+      {task.departmentName?.toUpperCase() === "RDD" && task.checkpointSummary?.currentOrNextTitle && <small className="task-checkpoint-hint"><span>{task.checkpointSummary.currentOrNextLabel}</span><strong>{task.checkpointSummary.currentOrNextTitle}</strong></small>}
     </>
   );
 }
@@ -153,7 +159,10 @@ function App() {
         })
       );
 
-      setTasksByColumn(Object.fromEntries(taskEntries));
+      const allTasks = taskEntries.flatMap(([, tasks]) => tasks);
+      const summaries = allTasks.length ? await apiFetch(`${API_BASE_URL}/api/tasks/checkpoints/summary?${allTasks.map((task) => `taskIds=${task.id}`).join("&")}`) : null;
+      const summaryByTask = summaries?.ok ? Object.fromEntries((await summaries.json()).map((summary) => [summary.taskId, summary])) : {};
+      setTasksByColumn(Object.fromEntries(taskEntries.map(([columnId, tasks]) => [columnId, tasks.map((task) => ({ ...task, checkpointSummary: summaryByTask[task.id] }))])));
     } catch (error) {
       console.error("Failed to load board:", error);
     }
@@ -164,7 +173,10 @@ function App() {
       const response = await apiFetch(`${API_BASE_URL}/api/tasks/department/${departmentId}`);
       if (!response.ok) throw new Error(`General tasks request failed (${response.status}).`);
       const data = await response.json();
-      setGeneralTasks(data.filter((task) => task.generalTask));
+      const tasks = data.filter((task) => task.generalTask);
+      const summaries = tasks.length ? await apiFetch(`${API_BASE_URL}/api/tasks/checkpoints/summary?${tasks.map((task) => `taskIds=${task.id}`).join("&")}`) : null;
+      const summaryByTask = summaries?.ok ? Object.fromEntries((await summaries.json()).map((summary) => [summary.taskId, summary])) : {};
+      setGeneralTasks(tasks.map((task) => ({ ...task, checkpointSummary: summaryByTask[task.id] })));
     } catch (error) {
       console.error("Failed to load general tasks:", error);
       setGeneralTasks([]);
@@ -387,7 +399,7 @@ function App() {
     const rect = card.getBoundingClientRect();
     pointerDownRef.current = {
       task,
-      canDrag: task.assigneeId === user?.userId,
+      canDrag: task.departmentName?.toUpperCase() !== "RDD" && task.assigneeId === user?.userId,
       startX: event.clientX,
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
@@ -692,11 +704,14 @@ function App() {
         if (view === "dashboard") setStaffRefreshKey((currentKey) => currentKey + 1);
         if (view === "report") { setSelectedReportUserId(null); setSelectedReportDate(null); }
         setActiveView(view);
-        const path=view==='completed'?'/completed':view==='desktop-notifications'?'/settings/desktop-notifications':view==='ppc-planning'?'/ppc/planning':view==='ppc-arrivals'?'/ppc/raw-material-arrivals':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':view==='report'?'/reports/monthly':'/';
+        const path=view==='completed'?'/completed':view==='requests'?'/requests':view==='desktop-notifications'?'/settings/desktop-notifications':view==='ppc-planning'?'/ppc/planning':view==='ppc-arrivals'?'/ppc/raw-material-arrivals':view==='users-admin'?'/admin/users':view==='data-management'?'/admin/settings/data-management':view==='client-access'?'/admin/settings/client-access':view==='report'?'/reports/monthly':'/';
         window.history.pushState({},'',path);
       }}
       onNotificationNavigate={(notification) => {
-        if (notification.rawMaterialArrivalId) {
+        if (notification.requestId) {
+          setActiveView("requests");
+          window.history.pushState({}, "", `/requests/${notification.requestId}`);
+        } else if (notification.rawMaterialArrivalId) {
           setActiveView("ppc-arrivals");
           window.history.pushState({}, "", `/ppc/raw-material-arrivals?arrivalId=${notification.rawMaterialArrivalId}`);
         } else if (isAdmin) {
@@ -726,6 +741,8 @@ function App() {
     <div className="app">
       {activeView === "completed" ? (
         <CompletedTasksPage />
+      ) : activeView === "requests" ? (
+        <InterdepartmentRequestsPage user={user} />
       ) : activeView === "desktop-notifications" ? (
         <DesktopNotificationsPage />
       ) : activeView === "users-admin" && isAdmin ? (
@@ -812,6 +829,7 @@ function App() {
           </div>
           <StaffKanban
             staffUser={selectedStaff}
+            currentUser={user}
             refreshKey={staffRefreshKey}
             onTaskSelected={setSelectedTask}
             onTaskChanged={() => setStaffRefreshKey((currentKey) => currentKey + 1)}
@@ -925,7 +943,7 @@ function App() {
               </div>
               <div className="task-list">
                 {generalTasks.filter((task) => task.status === status).map((task) => (
-                  <div key={task.id} className="task-card task-card--read-only"><TaskCardContent task={task} /></div>
+                  <div key={task.id} className={`task-card task-card--read-only priority-card-${String(task.priority || "MEDIUM").toLowerCase()}`}><TaskCardContent task={task} /></div>
                 ))}
               </div>
             </div>
@@ -955,7 +973,7 @@ function App() {
                       )}
 
                     <div
-                      className={`task-card ${
+                      className={`task-card priority-card-${String(task.priority || "MEDIUM").toLowerCase()} ${task.departmentName?.toUpperCase() === "RDD" ? "task-card--rdd" : ""} ${
                         draggedTask?.id === task.id ? "task-card--dragging" : ""
                       } ${
                         task.assigneeId === user?.userId ? "" : "task-card--read-only"
@@ -964,7 +982,8 @@ function App() {
                       data-task-id={task.id}
                       onPointerDown={(event) => handlePointerDown(event, task)}
                     >
-                      <TaskCardContent task={task} />
+                      <TaskCardContent task={task} showBoardName={false} />
+                      <RddTaskActions task={task} user={user} onChanged={() => loadBoard(selectedBoardId)} />
                     </div>
 
                     {dropIndicator?.columnId === column.id &&
@@ -995,7 +1014,7 @@ function App() {
           }}
         >
           <div className="task-card drag-preview-card">
-            <TaskCardContent task={dragPreview.task} />
+            <TaskCardContent task={dragPreview.task} showBoardName={false} />
           </div>
         </div>
       )}
@@ -1041,6 +1060,7 @@ function App() {
       <EditTaskModal
         key={selectedTask?.id ?? "closed"}
         task={selectedTask}
+        user={user}
         users={users}
         canDelete={canDeleteTask}
         onClose={() => setSelectedTask(null)}
