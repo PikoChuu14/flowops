@@ -34,7 +34,7 @@ public class AuthService {
                 .orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.UNAUTHORIZED,
-                                "Invalid email or password"
+                                "Invalid username/email or password"
                         )
                 );
 
@@ -48,7 +48,7 @@ public class AuthService {
         )) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
-                    "Invalid email or password"
+                    "Invalid username/email or password"
             );
         }
 

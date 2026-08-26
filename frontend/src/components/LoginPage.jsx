@@ -59,7 +59,7 @@ function LoginPage() {
     } catch (submitError) {
       console.error("Login failed:", submitError);
       setError(submitError.message === "credentials"
-        ? "Incorrect email or password."
+        ? "Incorrect username/email or password."
         : "Unable to sign in. Please try again.");
     } finally {
       setLoading(false);
@@ -88,15 +88,15 @@ function LoginPage() {
 
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="login-field">
-            <label htmlFor="login-email">Email</label>
+            <label htmlFor="login-email">Username or email</label>
             <div className="login-input-wrap">
               <MailIcon />
               <input
                 id="login-email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
+                autoComplete="username"
                 autoFocus
                 required
               />

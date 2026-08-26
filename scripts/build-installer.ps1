@@ -19,6 +19,10 @@ if(-not $iscc){ throw 'Inno Setup compiler ISCC.exe was not found. Install Inno 
 if(-not $jlink){ throw 'jlink.exe was not found. Run this build with a Java 21 JDK.' }
 $winsw = Join-Path $installer 'prerequisites\WinSW-x64.exe'; if(-not (Test-Path $winsw)){ throw 'installer\prerequisites\WinSW-x64.exe is required. Place the approved WinSW binary there; it is not bundled by this repository.' }
 $postgresInstaller = Join-Path $installer 'prerequisites\postgresql-installer.exe'; if(-not (Test-Path $postgresInstaller)){ throw 'installer\prerequisites\postgresql-installer.exe is required for the automatic PostgreSQL option. Place the official installer there; it is not bundled by this repository.' }
+$windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+Write-Host '[0/6] Validating installer scripts with Windows PowerShell 5.1...'
+& $windowsPowerShell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validate-windows-powershell.ps1') -Directory (Join-Path $installer 'scripts')
+if($LASTEXITCODE -ne 0){throw 'Installer scripts are not compatible with Windows PowerShell 5.1'}
 if(Test-Path -LiteralPath $installerOutput){
   Remove-Item -Force -LiteralPath $installerOutput
   if(Test-Path -LiteralPath $installerOutput){throw "Could not remove previous installer: $installerOutput"}

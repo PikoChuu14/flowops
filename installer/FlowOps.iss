@@ -68,7 +68,8 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Type: files; Name: "{commondesktop}\Kovax FlowOps.lnk"
 Type: files; Name: "{userdesktop}\Kovax FlowOps.lnk"
 Type: files; Name: "{commondesktop}\FlowOps.lnk"
-Type: files; Name: "{userdesktop}\FlowOps.lnk"
+; Do not delete {userdesktop}\FlowOps.lnk here. That name belongs to the
+; independently installed per-user FlowOps Client on machines hosting both.
 
 [UninstallRun]
 Filename: "{app}\FlowOps.exe"; Parameters: "stop"; Flags: runhidden waituntilterminated
@@ -139,6 +140,8 @@ begin Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'); e
 function JsonEscape(S: String): String;
 begin
   StringChangeEx(S, '\', '\\', True); StringChangeEx(S, '"', '\"', True);
+  StringChangeEx(S, #8, '\b', True); StringChangeEx(S, #9, '\t', True);
+  StringChangeEx(S, #12, '\f', True);
   StringChangeEx(S, #13, '\r', True); StringChangeEx(S, #10, '\n', True); Result := S;
 end;
 
@@ -707,6 +710,10 @@ begin
   Result := True;
   if CurPageID = DbChoicePage.ID then begin
     InstallPostgres := DbAutomaticRadio.Checked; Log('PostgreSQL detected: ' + BooleanText(PostgreSQLDetected));
+    if PostgreSQLDetected and InstallPostgres then begin
+      MsgBox('PostgreSQL ' + PgMajorVersion + ' is already installed on this computer. Select "Use the PostgreSQL installation already on this computer" to avoid a port and service conflict.', mbError, MB_OK);
+      Result := False; Exit;
+    end;
     if AppInstalled and (InstallMode = 'repair') then
       if MsgBox('FlowOps ' + InstalledVersion + ' is already installed.' + #13#10#13#10 + 'Continue with a repair installation?', mbConfirmation, MB_YESNO) <> IDYES then begin Result := False; Exit; end;
   end;
@@ -734,16 +741,28 @@ begin
 end;
 
 function ConfigureDatabase: Boolean;
-var Json: String; Code: Integer; InputPath: String;
+var Json, ErrorPath, ErrorText: String; ErrorOutput: AnsiString; Code: Integer; InputPath, LaunchLog: String; ExecStarted: Boolean;
 begin
   Result := False;
   InputPath := ExpandConstant('{tmp}\flowops-setup.json');
+  LaunchLog := ExpandConstant('{tmp}\flowops-setup-launch.log');
+  ErrorPath := DataRoot + '\runtime\installer-database-error.txt';
+  DeleteFile(LaunchLog);
+  DeleteFile(ErrorPath);
+  ForceDirectories(DataRoot);
   if FlowOpsDatabaseDetected and UseExistingDatabase then Log('Existing FlowOps database selected; preserved without destructive schema operations') else Log('New FlowOps database selected; backup/archive will be performed when an old database exists');
   Json := '{"host":"' + JsonEscape(DbAdminPage.Values[0]) + '","port":"' + JsonEscape(DbAdminPage.Values[1]) + '","adminUser":"' + JsonEscape(DbAdminPage.Values[2]) + '","postgresAdminPassword":"' + JsonEscape(DbAdminPage.Values[3]) + '","postgresBin":"' + JsonEscape(PgBinDir) + '","postgresService":"' + JsonEscape(PgServiceName) + '","postgresStatus":"' + JsonEscape(PgServiceStatus) + '","postgresVersion":"' + JsonEscape(PgMajorVersion) + '","postgresDetection":"' + JsonEscape(PgDetectionMessage) + '","appUser":"flowops_user","database":"flowops","appPort":"' + JsonEscape(AppPort) + '","databaseMode":"' + DatabaseModeText(UseExistingDatabase) + '","flowopsDatabaseDetected":' + JsonBoolean(FlowOpsDatabaseDetected) + ',"adminName":"' + JsonEscape(AdminPage.Values[0]) + '","adminEmail":"' + JsonEscape(AdminPage.Values[1]) + '","adminPassword":"' + JsonEscape(AdminPage.Values[2]) + '"}';
   SaveStringToFile(InputPath, Json, False);
-  Exec(PsPath, '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\tools\setup-database.ps1') + '" -InputFile "' + InputPath + '" -DataRoot "' + DataRoot + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  ExecStarted := Exec(PsPath, '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\tools\setup-database.ps1') + '" -InputFile "' + InputPath + '" -DataRoot "' + DataRoot + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  SaveStringToFile(LaunchLog, 'PowerShell started=' + BooleanText(ExecStarted) + #13#10 + 'Exit code=' + IntToStr(Code) + #13#10 + 'Input=' + InputPath + #13#10 + 'DataRoot=' + DataRoot, False);
   DeleteFile(InputPath);
-  if Code <> 0 then begin MsgBox('Database setup failed. See ' + DataRoot + '\logs\installer-database.log.', mbError, MB_OK); Exit; end;
+  if (not ExecStarted) or (Code <> 0) then begin
+    ErrorText := '';
+    if LoadStringFromFile(ErrorPath, ErrorOutput) then ErrorText := Trim(ErrorOutput);
+    if ErrorText = '' then ErrorText := 'The database helper did not return a detailed error.';
+    MsgBox(ErrorText + #13#10#13#10 + 'Details: ' + DataRoot + '\logs\installer-database.log' + #13#10 + 'Launcher log: ' + LaunchLog, mbError, MB_OK);
+    Exit;
+  end;
   Result := True;
 end;
 

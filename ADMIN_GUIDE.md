@@ -10,19 +10,18 @@ Install the full `FlowOps-Setup-x.x.x.exe` package on the single server machine 
 
 ## User Management
 
-Open **Users** in the administrator sidebar. The page lists all accounts and can be filtered by Pending Activation, Active, or Disabled; search matches names and email addresses.
+Open **Users** in the administrator sidebar. The page lists all accounts and can be filtered by Active or Disabled; search matches names, usernames, and email addresses.
 
 To onboard an employee:
 
 1. Select **Add User**.
-2. Enter the employee's name and unique email address.
+2. Enter the employee's name and a unique username or email address. A short username such as `afiq` works for an in-house account; the first administrator created by setup continues to use the email entered in the installer.
 3. Choose a department from the live departments table and select `STAFF`, `MANAGER`, or `ADMIN` (the default is `STAFF`).
-4. Save the user. The account starts as `PENDING_ACTIVATION` and its activation link is copied when browser clipboard permission is available. If the company address is not usable, the user is still created but FlowOps displays: `FlowOps company address is not configured. Configure APP_BASE_URL before generating activation links.`
-5. If necessary, select **Copy Activation Link** in the user row and send it through an approved company channel. The link expires after 48 hours by default and generating a replacement invalidates the previous link.
+4. Enter and confirm an initial password of at least eight characters, then save. The account is active immediately and no activation link or `APP_BASE_URL` setting is required.
 
-Employees choose their own password on the public activation page. Tokens are random, stored only as SHA-256 hashes, expire, and work once. Raw tokens and passwords are never logged.
+If an employee forgets their password, select **Set Password**, enter a new password twice, and give the new password to the employee through an approved company channel. Existing passwords cannot be displayed because FlowOps stores only secure password hashes. Setting a password for an older pending-activation account activates it and invalidates its old activation token. Disabled accounts stay disabled when their password is changed.
 
-Activation links always start with the exact configured company address. Moving the server between Wi-Fi, Ethernet, or a phone hotspot does not change generated links. To configure an installed server, edit `C:\ProgramData\FlowOps\config\application.properties`, set `app.base-url=http://flowops-server:8080`, restart the **FlowOps** service, and verify the value on **Client Access**. Do not use localhost for production onboarding.
+The company address is still used for client rollout information and any legacy activation links. Moving the server between Wi-Fi, Ethernet, or a phone hotspot does not change it. To configure an installed server, edit `C:\ProgramData\FlowOps\config\application.properties`, set `app.base-url=http://flowops-server:8080`, restart the **FlowOps** service, and verify the value on **Client Access**. It is no longer required to create or reset staff credentials.
 
 Use **Edit** to change a user's name, department, role, or status. Department and role changes do not rewrite historical tasks or reports. Use **Disable** for offboarding and **Reactivate** to restore access. Accounts are deliberately not deleted: old task ownership and reporting attribution must remain intact. The application refuses to disable or demote the final active administrator.
 

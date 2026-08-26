@@ -109,11 +109,11 @@ public class UserService {
 
     public UserResponse createUser(CreateUserRequest request) {
         if (request.departmentId() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Department is required");
-        String email = requireText(request.email(), "Email").toLowerCase(java.util.Locale.ROOT);
+        String email = requireLoginId(request.email());
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Email already exists"
+                    "Username or email already exists"
             );
         }
 
@@ -126,22 +126,35 @@ public class UserService {
                                 )
                         );
 
-        String unusablePassword = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
+        String password = requirePassword(request.password());
 
         Role role = request.role() == null ? Role.STAFF : request.role();
         User user = new User(
                 requireText(request.name(), "Name"),
                 email,
-                unusablePassword,
+                passwordEncoder.encode(password),
                 role,
                 department
         );
-        user.setStatus(AccountStatus.PENDING_ACTIVATION);
+        user.setStatus(AccountStatus.ACTIVE);
 
         User savedUser = userRepository.save(user);
 
         log.info("ADMIN action: user created id={} role={} departmentId={}", savedUser.getId(), savedUser.getRole(), department.getId());
         return toResponse(savedUser);
+    }
+
+    @Transactional
+    public UserResponse setPassword(Long id, String password) {
+        User user = requireUser(id);
+        user.setPassword(passwordEncoder.encode(requirePassword(password)));
+        activationTokenRepository.deleteByUser(user);
+        if (user.getStatus() == AccountStatus.PENDING_ACTIVATION) {
+            user.setStatus(AccountStatus.ACTIVE);
+            user.setStatusBeforeDisabled(null);
+        }
+        log.info("ADMIN action: password replaced for user id={}", id);
+        return toResponse(userRepository.save(user));
     }
 
     @Transactional
@@ -200,6 +213,17 @@ public class UserService {
 
     private User requireUser(Long id) { return userRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")); }
     private String requireText(String value, String field) { if (value == null || value.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, field + " is required"); return value.trim(); }
+    private String requireLoginId(String value) {
+        String loginId = requireText(value, "Username or email").toLowerCase(java.util.Locale.ROOT);
+        if (loginId.length() > 254 || loginId.chars().anyMatch(Character::isWhitespace))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username or email must not contain spaces and must be 254 characters or fewer");
+        return loginId;
+    }
+    private String requirePassword(String value) {
+        if (value == null || value.length() < 8)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters");
+        return value;
+    }
     private void lockAndProtectLastAdmin(User user, Role nextRole, AccountStatus nextStatus) {
         if (user.getRole() == Role.ADMIN && user.getStatus() == AccountStatus.ACTIVE && (nextRole != Role.ADMIN || nextStatus != AccountStatus.ACTIVE)
                 && userRepository.findByRoleAndStatus(Role.ADMIN, AccountStatus.ACTIVE).size() <= 1) {
