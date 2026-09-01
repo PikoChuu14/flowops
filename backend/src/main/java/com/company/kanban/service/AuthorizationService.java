@@ -78,15 +78,10 @@ public class AuthorizationService {
     }
 
     public void requireTaskOwnerMove(User user, Task task) {
+        // Moving a task is a department-board operation.  Editing/reassigning
+        // ownership remains separately protected, but board members must be
+        // able to keep the board organized even when they are not the assignee.
         requireTaskAccess(user, task);
-
-        if (user == null || task.getAssignee() == null
-                || !Objects.equals(user.getId(), task.getAssignee().getId())) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "You can only move tasks assigned to yourself"
-            );
-        }
     }
 
     public void requirePersonalTaskAccess(User user, Task task) {
@@ -97,7 +92,9 @@ public class AuthorizationService {
     }
 
     public void requirePersonalStatusMove(User user, Task task, com.company.kanban.entity.TaskStatus targetStatus) {
-        requirePersonalTaskAccess(user, task);
+        // Status buttons and drag/drop are both department-board operations.
+        // Personal Kanban still only displays the signed-in user's tasks.
+        requireTaskAccess(user, task);
 
         if (user.getRole() == Role.STAFF
                 && !task.isGeneralTask()
@@ -199,12 +196,6 @@ public class AuthorizationService {
     }
 
     public void requireGeneralTaskCreation(User currentUser, Department department) {
-        if (department == null || !"PPC".equalsIgnoreCase(department.getName())) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "General task creation is currently available only for PPC"
-            );
-        }
         if (!isAdmin(currentUser)) {
             if (currentUser == null || currentUser.getDepartment() == null
                     || !Objects.equals(currentUser.getDepartment().getId(), department.getId())) {

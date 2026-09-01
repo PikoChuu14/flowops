@@ -6,9 +6,11 @@ if(-not (Test-Path -LiteralPath $versionFile -PathType Leaf)){
   throw 'ERROR: VERSION.txt is missing or invalid. Expected a semantic version such as 1.1.0.'
 }
 $appVersion = (Get-Content -Raw -LiteralPath $versionFile).Trim()
-if($appVersion -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\z'){
-  throw 'ERROR: VERSION.txt is missing or invalid. Expected a semantic version such as 1.1.0.'
+if($appVersion -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.[0-9A-Za-z-]+)?\z'){
+  throw 'ERROR: VERSION.txt is missing or invalid. Expected a release version such as 1.2.4.bf1.'
 }
+$versionParts = $appVersion -split '\.'
+$fileVersion = "$($versionParts[0]).$($versionParts[1]).$($versionParts[2]).1"
 $installerFileName = "FlowOps-Setup-$appVersion.exe"
 $installerOutput = Join-Path $root "dist\installer\$installerFileName"
 Write-Host "Building FlowOps v$appVersion"
@@ -53,7 +55,7 @@ if(Test-Path $runtimeDir){Remove-Item -Recurse -Force $runtimeDir}
 if($LASTEXITCODE -ne 0){throw 'jlink runtime creation failed'}
 if(-not (Test-Path (Join-Path $runtimeDir 'bin\java.exe'))){throw "jlink completed but runtime\bin\java.exe is missing: $runtimeDir"}
 Write-Host '[OK] runtime\bin\java.exe'
-Write-Host '[5/6] Compiling Inno Setup installer...'; & $iscc "/DAppVersion=$appVersion" "$installer\FlowOps.iss"; if($LASTEXITCODE -ne 0){throw 'Inno Setup compilation failed'}
+Write-Host '[5/6] Compiling Inno Setup installer...'; & $iscc "/DAppVersion=$appVersion" "/DAppVersionNumeric=$fileVersion" "$installer\FlowOps.iss"; if($LASTEXITCODE -ne 0){throw 'Inno Setup compilation failed'}
 if(-not (Test-Path -LiteralPath $installerOutput)){throw "Inno Setup reported success but the installer was not created: $installerOutput"}
 $installerTimestamp = (Get-Item -LiteralPath $installerOutput).LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss zzz')
 Write-Host '[6/6] Installer ready'

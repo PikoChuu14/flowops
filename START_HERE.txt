@@ -21,7 +21,7 @@ Other Windows computers must not run the server installer or install PostgreSQL.
 
 WINDOWS STAFF CLIENT
 1. IT assigns a stable server URL using internal DNS, a reserved/static IP, or a DHCP reservation.
-2. IT builds or supplies FlowOps-Client-Setup.exe.
+2. IT builds or supplies the versioned FlowOps-Client-Setup-<version>.exe.
 3. Run it on the staff PC and enter that central server URL.
 4. Click Test Connection, continue setup, then launch FlowOps from the Desktop or Start Menu.
 5. To change the URL later, open Start Menu → FlowOps → Configure FlowOps Client.

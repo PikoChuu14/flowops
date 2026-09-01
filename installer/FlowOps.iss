@@ -2,6 +2,9 @@
 #ifndef AppVersion
   #error AppVersion must be supplied by scripts\build-installer.ps1
 #endif
+#ifndef AppVersionNumeric
+  #error AppVersionNumeric must be supplied by scripts\build-installer.ps1
+#endif
 #define AppPublisher "FlowOps Contributors"
 ; Permanent product identity. Keep this value unchanged for every release.
 #define AppId "{8B58D1C2-7FD1-4CF7-9B49-0B2AE24C1A4E}"
@@ -26,7 +29,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#AppVersionNumeric}
 VersionInfoDescription=FlowOps installer
 
 [Files]
@@ -173,13 +176,15 @@ begin
       if CurrentPart = PartIndex then
       begin
         Token := Copy(Value, StartAt, I - StartAt);
-        Result := StrToIntDef(Token, 0);
+        Result := StrToIntDef(Token, -1);
+        if Result < 0 then Result := 1;
         Exit;
       end;
       CurrentPart := CurrentPart + 1;
       StartAt := I + 1;
     end;
-  Result := 0;
+  if (PartIndex = 3) and (StartAt <= Length(Value)) then Result := 1
+  else Result := 0;
 end;
 
 function CompareVersionText(const LeftValue, RightValue: String): Integer;

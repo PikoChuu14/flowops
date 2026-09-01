@@ -118,12 +118,13 @@ function App() {
   const dropIndicatorRef = useRef(null);
   const pointerDownRef = useRef(null);
   const tasksByColumnRef = useRef(tasksByColumn);
+  const generalTasksRef = useRef(generalTasks);
   const moveTaskRef = useRef(null);
+  const moveGeneralTaskRef = useRef(null);
   const selectedStaff = users.find(
     (candidate) => candidate.id === Number(selectedStaffId)
   ) ?? null;
-  const selectedDepartment = departments.find((department) => department.id === selectedDepartmentId);
-  const canShowGeneralBoard = selectedDepartment?.name?.toUpperCase() === "PPC";
+  const canShowGeneralBoard = selectedDepartmentId !== null;
 
   const loadBoard = useCallback(async (boardId) => {
     try {
@@ -262,7 +263,7 @@ function App() {
         setColumns([]);
         setTasksByColumn({});
       }
-      if (data.length === 0 && departments.find((department) => department.id === departmentId)?.name?.toUpperCase() === "PPC") {
+      if (data.length === 0) {
         setSelectedBoardId("general");
       }
     } catch (error) {
@@ -332,6 +333,10 @@ function App() {
     tasksByColumnRef.current = tasksByColumn;
   }, [tasksByColumn]);
 
+  useEffect(() => {
+    generalTasksRef.current = generalTasks;
+  }, [generalTasks]);
+
   function updateDropIndicator(indicator) {
     const previous = dropIndicatorRef.current;
     const isSameIndicator =
@@ -358,6 +363,27 @@ function App() {
 
   function getDropIndicator(clientX, clientY, task) {
     const element = document.elementFromPoint(clientX, clientY);
+    const generalTaskElement = element?.closest("[data-general-task-id]");
+    const generalColumnElement = element?.closest("[data-general-status]");
+
+    if (task.generalTask) {
+      if (generalTaskElement) {
+        const targetTaskId = Number(generalTaskElement.dataset.generalTaskId);
+        if (targetTaskId === task.id) return null;
+        const rect = generalTaskElement.getBoundingClientRect();
+        return {
+          status: generalTaskElement.dataset.generalStatus,
+          taskId: targetTaskId,
+          position: clientY < rect.top + rect.height / 2 ? "before" : "after",
+        };
+      }
+      return generalColumnElement ? {
+        status: generalColumnElement.dataset.generalStatus,
+        taskId: null,
+        position: "after",
+      } : null;
+    }
+
     const taskElement = element?.closest("[data-task-id]");
 
     if (taskElement) {
@@ -399,7 +425,7 @@ function App() {
     const rect = card.getBoundingClientRect();
     pointerDownRef.current = {
       task,
-      canDrag: task.departmentName?.toUpperCase() !== "RDD" && task.assigneeId === user?.userId,
+      canDrag: true,
       startX: event.clientX,
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
@@ -481,6 +507,18 @@ function App() {
         return;
       }
 
+      if (task.generalTask) {
+        const targetTasks = generalTasksRef.current
+          .filter((candidate) => candidate.status === indicator.status)
+          .filter((candidate) => candidate.id !== task.id);
+        const targetIndex = indicator.taskId === null
+          ? targetTasks.length
+          : targetTasks.findIndex((candidate) => candidate.id === indicator.taskId)
+            + (indicator.position === "after" ? 1 : 0);
+        await moveGeneralTaskRef.current(task, indicator.status, targetIndex + 1);
+        return;
+      }
+
       if (indicator.taskId === null) {
         const targetTasks = tasksByColumnRef.current[indicator.columnId] || [];
 
@@ -536,6 +574,22 @@ function App() {
       window.removeEventListener("pointercancel", handlePointerCancel);
     };
   }, []);
+
+  const moveGeneralTask = useCallback(async (task, status, targetPosition) => {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/tasks/${task.id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status, targetPosition }),
+      });
+      if (!response.ok) throw new Error(`Failed to move general task (${response.status})`);
+      await loadGeneralTasks(selectedDepartmentId);
+    } catch (error) {
+      console.error("Failed to move general task:", error);
+    }
+  }, [loadGeneralTasks, selectedDepartmentId]);
+  useEffect(() => {
+    moveGeneralTaskRef.current = moveGeneralTask;
+  }, [moveGeneralTask]);
 
   const moveTask = useCallback(
     async (task, targetColumnId, targetPosition) => {
@@ -937,14 +991,24 @@ function App() {
             ["REVIEW", "Review"],
             ["DONE", "Done"],
           ].map(([status, label]) => (
-            <div className="kanban-column" key={status}>
+              <div className="kanban-column" key={status} data-general-status={status}>
               <div className="column-header">
                 <h2>{label}</h2>
               </div>
               <div className="task-list">
                 {generalTasks.filter((task) => task.status === status).map((task) => (
-                  <div key={task.id} className={`task-card task-card--read-only priority-card-${String(task.priority || "MEDIUM").toLowerCase()}`}><TaskCardContent task={task} /></div>
+                  <div key={task.id} className="task-wrapper">
+                    {dropIndicator?.status === status && dropIndicator?.taskId === task.id && dropIndicator?.position === "before" && <div className="drop-indicator" />}
+                    <div
+                      className={`task-card priority-card-${String(task.priority || "MEDIUM").toLowerCase()} ${draggedTask?.id === task.id ? "task-card--dragging" : ""}`}
+                      data-general-task-id={task.id}
+                      data-general-status={status}
+                      onPointerDown={(event) => handlePointerDown(event, task)}
+                    ><TaskCardContent task={task} /><RddTaskActions task={task} user={user} onChanged={() => loadGeneralTasks(selectedDepartmentId)} /></div>
+                    {dropIndicator?.status === status && dropIndicator?.taskId === task.id && dropIndicator?.position === "after" && <div className="drop-indicator" />}
+                  </div>
                 ))}
+                {dropIndicator?.status === status && dropIndicator?.taskId === null && <div className="drop-indicator" />}
               </div>
             </div>
           ))}
@@ -1037,6 +1101,9 @@ function App() {
             if (createdTask?.boardId) {
               setSelectedBoardId(createdTask.boardId);
               await loadBoard(createdTask.boardId);
+            } else if (createdTask?.generalTask) {
+              setSelectedBoardId("general");
+              await loadGeneralTasks(selectedDepartmentId);
             }
           }}
         />

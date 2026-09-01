@@ -2,7 +2,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $installer = Join-Path $root 'installer'
 $version = (Get-Content -Raw -LiteralPath (Join-Path $root 'VERSION.txt')).Trim()
-if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid FlowOps version: $version" }
+if ($version -notmatch '^\d+\.\d+\.\d+(\.[0-9A-Za-z-]+)?$') { throw "Invalid FlowOps version: $version" }
+$versionParts = $version -split '\.'
+$fileVersion = "$($versionParts[0]).$($versionParts[1]).$($versionParts[2]).1"
 
 function Find-Tool([string]$Name, [string[]]$Fallbacks) {
   $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -28,9 +30,9 @@ $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & (Join-Path $PSScriptRoot 'publish-agent.ps1') -DotNet $dotnet -Version $version
 
-& $iscc "/DAppVersion=$version" (Join-Path $installer 'FlowOps-Client.iss')
+& $iscc "/DAppVersion=$version" "/DAppVersionNumeric=$fileVersion" (Join-Path $installer 'FlowOps-Client.iss')
 if ($LASTEXITCODE -ne 0) { throw 'FlowOps Client installer compilation failed.' }
 
-$output = Join-Path $root 'dist\installer\FlowOps-Client-Setup.exe'
+$output = Join-Path $root "dist\installer\FlowOps-Client-Setup-$version.exe"
 if (-not (Test-Path -LiteralPath $output)) { throw "Installer output was not created: $output" }
 Write-Host "FlowOps Client installer created: $output"

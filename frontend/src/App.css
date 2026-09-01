@@ -503,6 +503,9 @@
 .task-card-footer span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rdd-task-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .rdd-task-actions button { min-height: 36px; padding: 8px 14px; flex: 0 1 auto; }
+.task-move-actions { justify-content: flex-start; gap: 6px; margin-top: 8px; }
+.task-move-actions button { min-height: 26px; padding: 4px 8px; font-size: 11px; line-height: 1.1; box-shadow: none; }
+.task-move-actions button span { font-size: 13px; font-weight: 800; }
 .task-checkpoints { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e5ebf3; }
 .task-checkpoints .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .task-checkpoints h3 { margin: 0; font-size: 15px; }

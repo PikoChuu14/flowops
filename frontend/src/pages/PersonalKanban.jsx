@@ -24,8 +24,8 @@ function PersonalKanban({ user, users = [], departments = [] }) {
   const pointerDownRef = useRef(null);
   const draggedTaskRef = useRef(null);
   const dropIndicatorRef = useRef(null);
-  const ppcDepartment = departments.find((department) => department.name?.toUpperCase() === "PPC");
-  const canCreateGeneral = user?.role === "ADMIN" || user?.departmentName?.toUpperCase() === "PPC";
+  const userDepartment = departments.find((department) => department.id === user?.departmentId);
+  const canCreateGeneral = Boolean(userDepartment || user?.role === "ADMIN");
 
   async function loadMyTasks() {
     try {
@@ -106,7 +106,6 @@ function PersonalKanban({ user, users = [], departments = [] }) {
   }
 
   function handlePointerDown(event, task) {
-    if (task.departmentName?.toUpperCase() === "RDD") return;
     if (event.button !== 0) {
       return;
     }
@@ -222,7 +221,7 @@ function PersonalKanban({ user, users = [], departments = [] }) {
     <>
       <div className="personal-kanban-heading">
         <h1>My Work</h1>
-        {canCreateGeneral && ppcDepartment && (
+        {canCreateGeneral && userDepartment && (
           <button type="button" className="primary-button" onClick={() => setShowCreateGeneral(true)}>+ General Task</button>
         )}
       </div>
@@ -311,7 +310,7 @@ function PersonalKanban({ user, users = [], departments = [] }) {
       <CreateTaskModal
         isOpen={showCreateGeneral}
         generalOnly
-        departmentId={ppcDepartment?.id}
+        departmentId={userDepartment?.id}
         users={users}
         user={user}
         onClose={() => setShowCreateGeneral(false)}
