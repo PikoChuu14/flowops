@@ -148,7 +148,7 @@ function CreateTaskModal({ isOpen, column, board, boards = [], departmentId, gen
         <div className="modal-header">
           <div>
             <h2 id="create-task-title">Create Task</h2>
-            <p>{isGeneral ? "PPC · General Task" : `Adding to ${selectedBoard?.name ?? "Project"} · To Do`}</p>
+            <p>{isGeneral ? `${user?.departmentName ?? "Department"} · General Task` : `Adding to ${selectedBoard?.name ?? "Project"} · To Do`}</p>
           </div>
           <button
             type="button"

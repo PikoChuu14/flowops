@@ -48,6 +48,7 @@ class TaskServiceGeneralTaskTest {
         prodStaff = entity(new User("PROD Staff", "prod@test", "x", Role.STAFF, prod), 3L);
         admin = entity(new User("Admin", "admin@test", "x", Role.ADMIN, prod), 4L);
         when(departments.findById(10L)).thenReturn(Optional.of(ppc));
+        when(departments.findById(20L)).thenReturn(Optional.of(prod));
         when(tasks.save(any(Task.class))).thenAnswer(invocation -> {
             Task task = invocation.getArgument(0);
             if (task.getId() == null) ReflectionTestUtils.setField(task, "id", 100L);
@@ -100,10 +101,14 @@ class TaskServiceGeneralTaskTest {
     }
 
     @Test
-    void nonPpcUserCannotCreatePpcGeneralTask() {
-        assertThrows(ResponseStatusException.class,
-                () -> service.createTask(request(null, 10L, null), prodStaff));
-        verify(tasks, never()).save(any());
+    void staffCanCreateGeneralTaskForTheirDepartment() {
+        when(users.findById(3L)).thenReturn(Optional.of(prodStaff));
+
+        var response = service.createTask(request(null, 20L, 3L), prodStaff);
+
+        assertTrue(response.generalTask());
+        assertEquals(20L, response.departmentId());
+        assertEquals(3L, response.assigneeId());
     }
 
     @Test
