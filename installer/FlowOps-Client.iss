@@ -4,6 +4,9 @@
 #ifndef AppVersion
 #define AppVersion "1.1.2"
 #endif
+#ifndef AppVersionNumeric
+#define AppVersionNumeric "1.1.2.1"
+#endif
 
 [Setup]
 AppId={{#AppId}
@@ -17,13 +20,13 @@ UninstallDisplayIcon={app}\FlowOps.ico
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir=..\dist\installer
-OutputBaseFilename=FlowOps-Client-Setup
+OutputBaseFilename=FlowOps-Client-Setup-{#AppVersion}
 PrivilegesRequired=lowest
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 VersionInfoDescription=FlowOps lightweight Windows client installer
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#AppVersionNumeric}
 CloseApplications=yes
 RestartApplications=no
 
